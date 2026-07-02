@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import type { ConnectionStatus, RunTiming } from "../store";
 import { useStore } from "../store";
-import { postAsk, postOntologyDraft, postReplay } from "../api";
+import { postAsk, postDataUpload, postOntologyDraft, postReplay } from "../api";
 
 const DOT_COLOR: Record<ConnectionStatus, string> = {
   connected: "var(--color-committed-green)",
@@ -40,13 +40,14 @@ function useElapsedLabel(run: RunTiming): string {
 }
 
 export function Topbar() {
-  const { connectionStatus, run, applyEvent } = useStore();
+  const { connectionStatus, run, applyEvent, refetch, pushToast } = useStore();
   const runActive = run.startedAt !== null && run.endedAt === null;
   const elapsed = useElapsedLabel(run);
 
   const [question, setQuestion] = useState("");
-  const [busy, setBusy] = useState<"ask" | "replay" | "draft" | null>(null);
+  const [busy, setBusy] = useState<"ask" | "replay" | "draft" | "upload" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const reportFailure = (err: unknown, fallbackMessage: string): void => {
     const message = err instanceof Error ? err.message : String(err);
@@ -85,6 +86,26 @@ export function Topbar() {
       await postReplay();
     } catch (err) {
       reportFailure(err, "replay failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleFilePicked = async (e: ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // reset so re-picking the same file still fires onChange
+    if (!file || busy) return;
+    setBusy("upload");
+    setActionError(null);
+    try {
+      const result = await postDataUpload(file);
+      await refetch(); // new source node -> canvas fitView tracks it
+      pushToast(
+        `table ${result.table} added — ${result.rows} rows, ${result.columns.length} columns`,
+        "success",
+      );
+    } catch (err) {
+      reportFailure(err, "upload failed");
     } finally {
       setBusy(null);
     }
@@ -135,6 +156,21 @@ export function Topbar() {
         <span className="font-mono text-[12px] text-text-secondary">
           AGENT {elapsed} / MANUAL {MANUAL_BASELINE}
         </span>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv"
+          className="hidden"
+          onChange={(e) => void handleFilePicked(e)}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={busy === "upload"}
+          className="rounded border border-hairline px-2.5 py-1 text-[11px] uppercase tracking-wider text-text-secondary hover:border-agent-blue hover:text-agent-blue disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy === "upload" ? "Uploading…" : "Add data"}
+        </button>
         <button
           type="button"
           onClick={() => void runDraft()}

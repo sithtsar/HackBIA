@@ -1,4 +1,4 @@
-import type { BoardState } from "./types";
+import type { BoardState, UploadResponse } from "./types";
 import fixtureStateRaw from "./fixtures/state.json";
 
 // ponytail: JSON imports widen string literal fields (e.g. "status") to
@@ -60,6 +60,21 @@ export async function postOntologyDraft(): Promise<RunHandle> {
     throw new Error(`POST /api/ontology/draft failed: ${res.status}`);
   }
   return (await res.json()) as RunHandle;
+}
+
+export async function postDataUpload(file: File): Promise<UploadResponse> {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch("/api/data/upload", { method: "POST", body });
+  if (!res.ok) {
+    // Backend sends FastAPI's default `{detail: string}` on 400/413.
+    const detail = await res
+      .json()
+      .then((j: { detail?: string }) => j.detail)
+      .catch(() => undefined);
+    throw new Error(detail ?? `POST /api/data/upload failed: ${res.status}`);
+  }
+  return (await res.json()) as UploadResponse;
 }
 
 export async function postReplay(): Promise<void> {

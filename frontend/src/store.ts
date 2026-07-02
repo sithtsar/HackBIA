@@ -28,7 +28,8 @@ export type FetchStatus = "loading" | "ready" | "error";
 
 export type RunTiming = { startedAt: number | null; endedAt: number | null };
 
-export type ToastItem = { id: string; message: string };
+export type ToastKind = "error" | "success";
+export type ToastItem = { id: string; message: string; kind: ToastKind };
 
 const NO_RUN: RunTiming = { startedAt: null, endedAt: null };
 
@@ -50,6 +51,8 @@ export type StoreValue = {
   run: RunTiming;
   toasts: ToastItem[];
   dismissToast: (id: string) => void;
+  /** Push a toast outside the SSE stream (e.g. an upload success confirmation). */
+  pushToast: (message: string, kind: ToastKind) => void;
 };
 
 const StoreContext = createContext<StoreValue | null>(null);
@@ -112,9 +115,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  const pushToast = (message: string): void => {
+  const pushToast = (message: string, kind: ToastKind): void => {
     const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    setToasts((prev) => [...prev, { id, message }]);
+    setToasts((prev) => [...prev, { id, message, kind }]);
     setTimeout(() => dismissToast(id), TOAST_TTL_MS);
   };
 
@@ -136,7 +139,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setRun((prev) => ({ startedAt: prev.startedAt, endedAt: Date.now() }));
         break;
       case "error":
-        pushToast(envelope.payload.message);
+        pushToast(envelope.payload.message, "error");
         break;
       default:
         break;
@@ -164,6 +167,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     run,
     toasts,
     dismissToast,
+    pushToast,
   };
 
   return createElement(StoreContext.Provider, { value }, children);

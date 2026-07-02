@@ -37,6 +37,10 @@ export type GraphEdge = {
   kind: "feeds" | "join" | "derives" | "produces";
 };
 
+// POST /api/data/upload response shape.
+export type UploadColumn = { name: string; type: string };
+export type UploadResponse = { table: string; rows: number; columns: UploadColumn[] };
+
 // --- Below this line: not verbatim contract types, but shapes derived from
 // the "HTTP API" and "Event envelope" sections of contracts.md, needed to
 // type the fetch layer and the SSE seam. ---
