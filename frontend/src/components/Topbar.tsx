@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import type { ConnectionStatus, RunTiming } from "../store";
 import { useStore } from "../store";
-import { postAsk, postDataUpload, postOntologyDraft, postReplay } from "../api";
+import {
+  fetchOntologyExport,
+  postAsk,
+  postDataUpload,
+  postDemoReset,
+  postOntologyDraft,
+  postReplay,
+} from "../api";
 
 const DOT_COLOR: Record<ConnectionStatus, string> = {
   connected: "var(--color-committed-green)",
@@ -10,6 +17,14 @@ const DOT_COLOR: Record<ConnectionStatus, string> = {
 };
 
 const MANUAL_BASELINE = "45:00";
+
+const CANNED_QUESTIONS = [
+  "How many active customers do we have?",
+  "What's happening with support tickets in the last two weeks?",
+  "Which customers have the most open tickets?",
+] as const;
+
+type BusyState = "ask" | "replay" | "draft" | "upload" | "reset" | "export" | null;
 
 // ponytail: module-level counter, not a UUID lib — same-millisecond local
 // error envelopes would otherwise collide on React key.
@@ -45,7 +60,7 @@ export function Topbar() {
   const elapsed = useElapsedLabel(run);
 
   const [question, setQuestion] = useState("");
-  const [busy, setBusy] = useState<"ask" | "replay" | "draft" | "upload" | null>(null);
+  const [busy, setBusy] = useState<BusyState>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -63,8 +78,8 @@ export function Topbar() {
     });
   };
 
-  const submitAsk = async (): Promise<void> => {
-    const trimmed = question.trim();
+  const submitAsk = async (override?: string): Promise<void> => {
+    const trimmed = (override ?? question).trim();
     if (!trimmed || runActive || busy) return;
     setBusy("ask");
     setActionError(null);
@@ -76,6 +91,11 @@ export function Topbar() {
     } finally {
       setBusy(null);
     }
+  };
+
+  const clickChip = (chip: string): void => {
+    setQuestion(chip);
+    void submitAsk(chip);
   };
 
   const runReplay = async (): Promise<void> => {
@@ -124,6 +144,39 @@ export function Topbar() {
     }
   };
 
+  const runReset = async (): Promise<void> => {
+    if (busy) return;
+    setBusy("reset");
+    setActionError(null);
+    try {
+      await postDemoReset();
+      await refetch();
+    } catch (err) {
+      reportFailure(err, "reset failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const runExport = async (): Promise<void> => {
+    if (busy) return;
+    setBusy("export");
+    setActionError(null);
+    try {
+      const blob = await fetchOntologyExport();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "ontology.yaml";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      reportFailure(err, "export failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <header className="flex h-12 items-center border-b border-hairline bg-panel px-3">
       <div className="flex flex-1 items-center gap-2">
@@ -147,6 +200,20 @@ export function Topbar() {
           placeholder="Ask the warehouse…"
           className="w-full max-w-md rounded border border-hairline bg-canvas px-3 py-1.5 text-[12px] text-text-primary placeholder:text-text-secondary disabled:cursor-not-allowed disabled:opacity-60"
         />
+        <div className="mt-1 flex max-w-md gap-1.5">
+          {CANNED_QUESTIONS.map((chip) => (
+            <button
+              key={chip}
+              type="button"
+              onClick={() => clickChip(chip)}
+              disabled={runActive || busy === "ask"}
+              title={chip}
+              className="truncate rounded border border-hairline bg-panel px-1.5 py-0.5 font-mono text-[11px] text-text-secondary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {chip}
+            </button>
+          ))}
+        </div>
         {actionError ? (
           <span className="mt-0.5 max-w-md truncate font-mono text-[10px] text-[#E5484D]">{actionError}</span>
         ) : null}
@@ -186,6 +253,22 @@ export function Topbar() {
           className="rounded border border-hairline px-2.5 py-1 text-[11px] uppercase tracking-wider text-text-secondary hover:border-agent-blue hover:text-agent-blue disabled:cursor-not-allowed disabled:opacity-50"
         >
           Replay
+        </button>
+        <button
+          type="button"
+          onClick={() => void runReset()}
+          disabled={busy === "reset"}
+          className="rounded border border-hairline px-2.5 py-1 text-[11px] uppercase tracking-wider text-text-secondary hover:border-agent-blue hover:text-agent-blue disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy === "reset" ? "Resetting…" : "Reset"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void runExport()}
+          disabled={busy === "export"}
+          className="rounded border border-hairline px-2.5 py-1 text-[11px] uppercase tracking-wider text-text-secondary hover:border-agent-blue hover:text-agent-blue disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Export
         </button>
       </div>
     </header>

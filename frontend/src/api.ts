@@ -87,3 +87,22 @@ export async function postReplay(): Promise<void> {
     throw new Error(`POST /api/replay failed: ${res.status}`);
   }
 }
+
+export async function postDemoReset(): Promise<void> {
+  const res = await fetch("/api/demo/reset", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /api/demo/reset failed: ${res.status}`);
+  }
+}
+
+export async function fetchOntologyExport(): Promise<Blob> {
+  const res = await fetch("/api/ontology/export");
+  if (!res.ok) {
+    throw new Error(`GET /api/ontology/export failed: ${res.status}`);
+  }
+  return await res.blob();
+}
