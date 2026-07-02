@@ -1,0 +1,20 @@
+version: 1
+sources:
+  - table: customers
+  - table: orders
+  - table: tickets
+objects:
+  - { id: obj_customer, name: Customer, table: customers }
+  - { id: obj_order,    name: Order,    table: orders }
+  - { id: obj_ticket,   name: Support Ticket, table: tickets }
+joins:
+  - { id: join_orders_customers, from: orders.customer_id, to: customers.id, confidence: 0.95, status: approved }
+  - { id: join_tickets_customers, from: tickets.customer_id, to: customers.id, confidence: 0.9, status: approved }
+metrics:
+  - id: m_active_customer
+    name: Active Customer
+    definition: "Customer with at least one order in the last 90 days"
+    sql: "SELECT DISTINCT customer_id FROM orders WHERE order_date >= current_date - INTERVAL 90 DAY"
+    source_tables: [orders]
+    confidence: 0.8
+    status: approved

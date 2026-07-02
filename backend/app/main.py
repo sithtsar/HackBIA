@@ -10,18 +10,21 @@ files; ontology.yaml + events.jsonl are the durable state).
 from __future__ import annotations
 
 import asyncio
+import shutil
 import uuid
 from contextlib import asynccontextmanager
 from typing import Any, Literal
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from . import agents
 from . import ingest as ingest_mod
 from . import ontology as onto_mod
+from . import seed as seed_mod
 from .actions import ActionPushError, push_action
 from .events import DEMO_EVENTS_FILE, ActionProposal, Envelope, EventBus, replay as replay_events
 
@@ -204,3 +207,27 @@ async def replay_route(body: ReplayBody | None = None) -> dict[str, bool]:
     file = body.file or str(DEMO_EVENTS_FILE)
     asyncio.create_task(replay_events(bus, file, body.speed))
     return {"ok": True}
+
+
+@app.post("/api/demo/reset")
+async def demo_reset() -> dict[str, bool]:
+    """Rebuild the demo to its pristine baseline: reseed CSVs/foundry.duckdb
+    (drops any uploaded tables), restore ontology.yaml from the committed
+    baseline, clear all in-memory demo state, and truncate the event log."""
+    await asyncio.to_thread(seed_mod.main)
+    shutil.copy2(onto_mod.ONTOLOGY_BASELINE_PATH, onto_mod.ONTOLOGY_PATH)
+
+    _actions.clear()
+    _pending.clear()
+    _insight_nodes.clear()
+    _action_nodes.clear()
+    _produces_edges.clear()
+
+    bus._jsonl_path.write_text("")
+    bus.publish("status", {"message": "demo reset: seed rebuilt, ontology baseline restored"})
+    return {"ok": True}
+
+
+@app.get("/api/ontology/export")
+async def ontology_export() -> FileResponse:
+    return FileResponse(onto_mod.ONTOLOGY_PATH, media_type="application/x-yaml", filename="ontology.yaml")

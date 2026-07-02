@@ -22,6 +22,9 @@ from .events import ActionProposal, OntologyTerm
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 ONTOLOGY_PATH = DATA_DIR / "ontology.yaml"
+# Committed, never-mutated reference copy — /api/demo/reset copies this over
+# ONTOLOGY_PATH to undo any drafts/approvals/uploads made during a demo run.
+ONTOLOGY_BASELINE_PATH = DATA_DIR / "ontology.baseline.yaml"
 
 
 def load_ontology(path: Path = ONTOLOGY_PATH) -> dict[str, Any]:
