@@ -151,15 +151,41 @@ async def _wrap(bus: EventBus, type, payload, run_id, ts) -> Envelope:
 async def replay(bus: EventBus, file: Path | str | None = None, speed: float = 4.0) -> int:
     """Read a jsonl file of envelopes and re-emit each onto the bus with a
     fresh id/ts, spaced ~0.3s/event (divided by speed) for a real-time feel.
-    Runs as a background asyncio task; returns the number of events emitted."""
+    Runs as a background asyncio task; returns the number of events emitted.
+
+    Errors never pass silently: a bad path or missing file stops the replay
+    and emits an `error` event; a malformed line is skipped (with its own
+    `error` event) and replay continues with the remaining lines."""
     path = Path(file) if file else DEMO_EVENTS_FILE
     delay = 0.3 / max(speed, 0.01)
-    with open(path) as f:
-        lines = [ln for ln in f if ln.strip()]
+    run_id = ""
+    try:
+        resolved = path.resolve()
+        if not resolved.is_relative_to(DATA_DIR):
+            bus.publish("error", {"message": "replay file outside data dir"}, run_id=run_id)
+            return 0
+        with open(resolved) as f:
+            lines = [ln for ln in f if ln.strip()]
+    except Exception as exc:
+        bus.publish("error", {"message": f"replay failed: {exc}"}, run_id=run_id)
+        return 0
+
     count = 0
-    for ln in lines:
-        raw = json.loads(ln)
-        bus.publish(raw["type"], raw["payload"], run_id=raw.get("run_id", ""))
-        count += 1
-        await asyncio.sleep(delay)
+    try:
+        for i, ln in enumerate(lines, start=1):
+            try:
+                raw = json.loads(ln)
+                run_id = raw.get("run_id", run_id)
+                etype, payload = raw["type"], raw["payload"]
+            except Exception as exc:
+                bus.publish(
+                    "error", {"message": f"replay failed at line {i}: {exc}"}, run_id=run_id
+                )
+                continue
+            bus.publish(etype, payload, run_id=run_id)
+            count += 1
+            await asyncio.sleep(delay)
+    except Exception as exc:
+        bus.publish("error", {"message": f"replay failed: {exc}"}, run_id=run_id)
+        return count
     return count
