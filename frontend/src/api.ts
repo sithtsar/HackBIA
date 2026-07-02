@@ -62,6 +62,31 @@ export async function postOntologyDraft(): Promise<RunHandle> {
   return (await res.json()) as RunHandle;
 }
 
+export type JoinResponse = { term_id: string };
+
+/** User-drawn object->object join (POST /api/ontology/join). The proposed
+ * edge + approval card arrive via SSE; the response is just the term id. */
+export async function postOntologyJoin(
+  fromObject: string,
+  toObject: string,
+): Promise<JoinResponse> {
+  const res = await fetch("/api/ontology/join", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ from_object: fromObject, to_object: toObject }),
+  });
+  if (!res.ok) {
+    // FastAPI `{detail}` on 400/404; a stale backend without the route 404s
+    // into the same error-toast path.
+    const detail = await res
+      .json()
+      .then((j: { detail?: string }) => j.detail)
+      .catch(() => undefined);
+    throw new Error(detail ?? `POST /api/ontology/join failed: ${res.status}`);
+  }
+  return (await res.json()) as JoinResponse;
+}
+
 export async function postDataUpload(file: File): Promise<UploadResponse> {
   const body = new FormData();
   body.append("file", file);

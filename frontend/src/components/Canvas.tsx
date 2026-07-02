@@ -1,26 +1,32 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
   Background,
   BackgroundVariant,
   Controls,
+  Panel,
+  ViewportPortal,
+  useNodesState,
   useReactFlow,
+  useStoreApi,
+  type Connection,
   type Edge,
+  type IsValidConnection,
   type NodeMouseHandler,
+  type OnConnect,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { GraphEdge, GraphNode } from "../types";
-import { layoutGraph, NODE_WIDTH, NODE_HEIGHT } from "../layout";
+import type { ActionProposal, GraphEdge, GraphNode, OntologyTerm } from "../types";
+import { layoutGraph, columnX, COLUMN_ORDER, NODE_WIDTH, NODE_HEIGHT } from "../layout";
 import { upstream } from "../lineage";
-import { FoundryNode, type FoundryFlowNode } from "./FoundryNode";
+import { postOntologyJoin } from "../api";
+import { useStore } from "../store";
+import { FoundryNode, type FoundryFlowNode, type FoundryNodeData } from "./FoundryNode";
 
 const nodeTypes = { foundry: FoundryNode };
 
-// Steady blue illumination for the selected node's upstream path — same glow
-// as the live trace pulse (FoundryNode's active box-shadow) but no animation,
-// per design tokens (motion is only for events).
-const SELECT_GLOW = "0 0 0 2px var(--color-agent-blue), 0 0 10px 2px var(--color-agent-blue)";
 const DIMMED = 0.35;
+const HEADER_Y = -72;
 
 type CanvasProps = {
   nodes: GraphNode[];
@@ -31,21 +37,156 @@ type CanvasProps = {
   onSelect: (id: string | null) => void;
 };
 
+/** One-line card description, joined client-side (no backend field):
+ * metric/object node id == OntologyTerm id, action id == ActionProposal id. */
+function describeNode(
+  node: GraphNode,
+  termDefById: ReadonlyMap<string, string>,
+  actionsById: ReadonlyMap<string, ActionProposal>,
+): string {
+  switch (node.kind) {
+    case "source":
+      return node.meta.table ?? "";
+    case "object":
+    case "metric":
+      return termDefById.get(node.id) ?? "";
+    case "insight":
+      return node.meta.severity ?? "";
+    case "action":
+      return actionsById.get(node.id)?.body.split("\n")[0] ?? "";
+  }
+}
+
+/** Faint small-caps column labels — orientation hints only, not lanes.
+ * They pan/zoom with the graph (rendered inside the viewport transform). */
+function ColumnHeaders() {
+  return (
+    <ViewportPortal>
+      {COLUMN_ORDER.map((kind) => (
+        <div
+          key={kind}
+          className="column-header text-center font-mono text-[10px] uppercase tracking-[0.25em] text-text-secondary"
+          style={{
+            position: "absolute",
+            transform: `translate(${columnX(kind) - NODE_WIDTH / 2}px, ${HEADER_Y}px)`,
+            width: NODE_WIDTH,
+            opacity: 0.4,
+            pointerEvents: "none",
+            userSelect: "none",
+          }}
+        >
+          {kind}
+        </div>
+      ))}
+    </ViewportPortal>
+  );
+}
+
+function LegendDot({ color }: { color: string }) {
+  return (
+    <span
+      className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle"
+      style={{ background: color }}
+    />
+  );
+}
+
+function LegendLine({ dashed }: { dashed: boolean }) {
+  return (
+    <span
+      className="mr-1.5 inline-block w-4 align-middle"
+      style={{ borderTop: `1px ${dashed ? "dashed" : "solid"} var(--color-text-secondary)` }}
+    />
+  );
+}
+
+function Legend() {
+  return (
+    <Panel position="bottom-left">
+      <div className="rounded border border-hairline bg-panel px-2.5 py-2 font-mono text-[10px] leading-[18px] text-text-secondary">
+        <div>
+          <LegendDot color="var(--color-pending-amber)" /> proposed
+        </div>
+        <div>
+          <LegendDot color="var(--color-committed-green)" /> approved
+        </div>
+        <div>
+          <LegendDot color="var(--color-agent-blue)" /> live activity
+        </div>
+        <div>
+          <LegendLine dashed /> join
+        </div>
+        <div>
+          <LegendLine dashed={false} /> data flow
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 /**
- * The `fitView` prop on <ReactFlow> only fits to the nodes it was mounted
- * with (per xyflow docs: "initially provided"). Every SSE event re-runs
- * dagre and can shift/add node positions, so without this the viewport
- * silently drifts out of sync with where nodes actually are — new (or
- * reflowed) nodes render fully off-screen with no error. Re-fitting here
- * on every nodes/edges change, instead of once per event type in the
- * reducer, keeps the whole graph on screen no matter which event caused it.
+ * Calm-viewport helper: the camera never moves on its own. When new nodes
+ * appear (count increase) and any of them is not fully inside the current
+ * viewport, show a "N new · fit view" chip instead of auto-fitting; the
+ * user fits explicitly by clicking it (or via the Controls fit button).
  */
-function FitViewOnDataChange({ nodes, edges }: { nodes: GraphNode[]; edges: GraphEdge[] }) {
+function NewNodesChip({ flowNodes }: { flowNodes: FoundryFlowNode[] }) {
   const { fitView } = useReactFlow();
+  const storeApi = useStoreApi();
+  const prevIds = useRef<ReadonlySet<string> | null>(null);
+  const [count, setCount] = useState(0);
+
   useEffect(() => {
-    fitView();
-  }, [nodes, edges, fitView]);
-  return null;
+    const ids = new Set(flowNodes.map((n) => n.id));
+    const prev = prevIds.current;
+    prevIds.current = ids;
+    // Mount + first data population (store starts empty until GET /api/state
+    // resolves) are covered by the fitView prop, not the chip.
+    if (prev === null || prev.size === 0) return;
+    const fresh = flowNodes.filter((n) => !prev.has(n.id));
+    if (fresh.length === 0) return;
+    const { width, height, transform } = storeApi.getState();
+    const [tx, ty, zoom] = transform;
+    const anyOffscreen = fresh.some((n) => {
+      const left = n.position.x * zoom + tx;
+      const top = n.position.y * zoom + ty;
+      return (
+        left < 0 ||
+        top < 0 ||
+        left + NODE_WIDTH * zoom > width ||
+        top + NODE_HEIGHT * zoom > height
+      );
+    });
+    // ponytail: chip clears only on its own click; a manual pan that reveals
+    // the nodes leaves it up until clicked — add viewport-change dismissal
+    // if that ever annoys anyone.
+    if (anyOffscreen) setCount((c) => c + fresh.length);
+  }, [flowNodes, storeApi]);
+
+  if (count === 0) return null;
+  return (
+    <Panel position="bottom-center">
+      <button
+        type="button"
+        onClick={() => {
+          void fitView({ padding: 0.15, duration: 250 }); // motion on user gesture only
+          setCount(0);
+        }}
+        className="rounded border border-hairline bg-panel px-2.5 py-1 font-mono text-[11px] text-text-secondary hover:text-text-primary"
+      >
+        {count} new · fit view
+      </button>
+    </Panel>
+  );
+}
+
+function sameCardData(a: FoundryNodeData, b: FoundryNodeData): boolean {
+  return (
+    a.label === b.label &&
+    a.status === b.status &&
+    a.description === b.description &&
+    a.meta === b.meta
+  );
 }
 
 export function Canvas({
@@ -56,39 +197,94 @@ export function Canvas({
   selectedId,
   onSelect,
 }: CanvasProps) {
-  // Upstream lineage of the selection; empty sets when nothing is selected.
+  const { pushToast, state } = useStore();
+  const { terms, actions } = state;
+
+  // React Flow owns node objects (positions included): drags flow through
+  // onNodesChange/applyNodeChanges into this state and never re-run layout
+  // or rebuild the array — moving one node re-renders only that node.
+  const [flowNodes, setFlowNodes, onNodesChange] = useNodesState<FoundryFlowNode>([]);
+
+  // Reconcile board -> flow nodes. Columns are INITIAL PLACEMENT ONLY:
+  // layoutGraph runs solely when the node-id set grows, and its positions
+  // are applied only to the new ids — existing nodes (dragged or not) keep
+  // whatever position they currently have. Card data refreshes in place.
+  useEffect(() => {
+    const termDefById = new Map(terms.map((t: OntologyTerm) => [t.id, t.definition]));
+    const actionsById = new Map(actions.map((a) => [a.id, a]));
+    setFlowNodes((prev) => {
+      const prevById = new Map(prev.map((n) => [n.id, n]));
+      const hasNew = nodes.some((n) => !prevById.has(n.id));
+      const autoPos = hasNew
+        ? new Map(
+            layoutGraph(nodes, edges).map((n) => [
+              n.id,
+              { x: n.x - NODE_WIDTH / 2, y: n.y - NODE_HEIGHT / 2 },
+            ]),
+          )
+        : null;
+      return nodes.map((node): FoundryFlowNode => {
+        const card: FoundryNodeData = {
+          label: node.label,
+          kind: node.kind,
+          status: node.status,
+          meta: node.meta,
+          description: describeNode(node, termDefById, actionsById),
+          active: false,
+          inPath: false,
+          dimmed: false,
+        };
+        const existing = prevById.get(node.id);
+        if (existing) {
+          // Position untouched; keep the same object ref when nothing
+          // changed so React Flow skips re-rendering the node.
+          if (sameCardData(existing.data, card)) return existing;
+          return {
+            ...existing,
+            data: {
+              ...card,
+              active: existing.data.active,
+              inPath: existing.data.inPath,
+              dimmed: existing.data.dimmed,
+            },
+          };
+        }
+        return {
+          id: node.id,
+          type: "foundry",
+          position: autoPos?.get(node.id) ?? { x: columnX(node.kind), y: 0 },
+          connectable: node.kind === "object", // drag-to-connect joins are object->object only
+          data: card,
+        };
+      });
+    });
+  }, [nodes, edges, terms, actions, setFlowNodes]);
+
+  // Upstream lineage of the selection; null when nothing is selected.
   const lineage = useMemo(
     () => (selectedId === null ? null : upstream({ nodes, edges }, selectedId)),
     [selectedId, nodes, edges],
   );
 
-  // New nodes (from insight/action/ontology_term_proposed events) simply
-  // change the `nodes` array reference, which re-runs this full dagre
-  // layout — no incremental positioning needed for this board's scale.
-  const flowNodes = useMemo<FoundryFlowNode[]>(() => {
-    const positioned = layoutGraph(nodes, edges);
-    return positioned.map((node) => {
-      const inPath = lineage?.nodeIds.has(node.id) ?? false;
-      const dimmed = lineage !== null && !inPath;
-      return {
-        id: node.id,
-        type: "foundry",
-        position: { x: node.x - NODE_WIDTH / 2, y: node.y - NODE_HEIGHT / 2 },
-        style: inPath
-          ? { boxShadow: SELECT_GLOW, borderRadius: 4 }
-          : dimmed
-            ? { opacity: DIMMED }
-            : undefined,
-        data: {
-          label: node.label,
-          kind: node.kind,
-          status: node.status,
-          meta: node.meta,
-          active: activeNodeIds.has(node.id),
-        },
-      };
-    });
-  }, [nodes, edges, activeNodeIds, lineage]);
+  // Live-trace glow + selection lineage are data-only updates (no position,
+  // no layout); unchanged nodes keep their object ref and don't re-render.
+  useEffect(() => {
+    setFlowNodes((prev) =>
+      prev.map((n) => {
+        const active = activeNodeIds.has(n.id);
+        const inPath = lineage?.nodeIds.has(n.id) ?? false;
+        const dimmed = lineage !== null && !inPath;
+        if (n.data.active === active && n.data.inPath === inPath && n.data.dimmed === dimmed) {
+          return n;
+        }
+        return { ...n, data: { ...n.data, active, inPath, dimmed } };
+      }),
+    );
+  }, [activeNodeIds, lineage, setFlowNodes]);
+
+  // Join edges reuse their term's id (backend convention), so a proposed
+  // join renders pending-amber until approved.
+  const termStatusById = useMemo(() => new Map(terms.map((t) => [t.id, t.status])), [terms]);
 
   const flowEdges = useMemo<Edge[]>(
     () =>
@@ -97,20 +293,47 @@ export function Canvas({
         const inPath = lineage?.edgeIds.has(edge.id) ?? false;
         const dimmed = lineage !== null && !inPath;
         const highlighted = active || inPath;
+        const pendingJoin = edge.kind === "join" && termStatusById.get(edge.id) === "proposed";
         return {
           id: edge.id,
           source: edge.source,
           target: edge.target,
           animated: active, // motion only for live events, never for steady selection
           style: {
-            stroke: highlighted ? "var(--color-agent-blue)" : "var(--color-hairline)",
+            stroke: highlighted
+              ? "var(--color-agent-blue)"
+              : pendingJoin
+                ? "var(--color-pending-amber)"
+                : "var(--color-hairline)",
             strokeWidth: highlighted ? 2 : 1,
             strokeDasharray: edge.kind === "join" ? "4 3" : undefined,
             opacity: dimmed ? DIMMED : 1,
           },
         };
       }),
-    [edges, activeEdgeKeys, lineage],
+    [edges, activeEdgeKeys, lineage, termStatusById],
+  );
+
+  const kindById = useMemo(() => new Map(nodes.map((n) => [n.id, n.kind])), [nodes]);
+
+  const isValidConnection = useCallback<IsValidConnection<Edge>>(
+    (conn: Edge | Connection) =>
+      conn.source !== conn.target &&
+      kindById.get(conn.source) === "object" &&
+      kindById.get(conn.target) === "object",
+    [kindById],
+  );
+
+  const onConnect = useCallback<OnConnect>(
+    (conn) => {
+      if (kindById.get(conn.source) !== "object" || kindById.get(conn.target) !== "object") return;
+      void postOntologyJoin(conn.source, conn.target)
+        .then(() => pushToast("join proposed — see approvals", "success"))
+        .catch((err: unknown) =>
+          pushToast(err instanceof Error ? err.message : String(err), "error"),
+        );
+    },
+    [kindById, pushToast],
   );
 
   const onNodeClick = useCallback<NodeMouseHandler>(
@@ -124,18 +347,21 @@ export function Canvas({
       nodes={flowNodes}
       edges={flowEdges}
       nodeTypes={nodeTypes}
-      nodesDraggable={false}
-      nodesConnectable={false}
+      onNodesChange={onNodesChange}
       elementsSelectable={false}
       onNodeClick={onNodeClick}
       onPaneClick={onPaneClick}
-      fitView
+      onConnect={onConnect}
+      isValidConnection={isValidConnection}
+      fitView // initial mount only; afterwards the camera moves solely on user gestures
       proOptions={{ hideAttribution: true }}
       colorMode="dark"
     >
       <Background variant={BackgroundVariant.Dots} color="#2B3444" gap={20} size={1} />
-      <Controls showInteractive={false} className="foundry-controls" />
-      <FitViewOnDataChange nodes={nodes} edges={edges} />
+      <Controls showInteractive={false} position="top-left" className="foundry-controls" />
+      <ColumnHeaders />
+      <Legend />
+      <NewNodesChip flowNodes={flowNodes} />
     </ReactFlow>
   );
 }

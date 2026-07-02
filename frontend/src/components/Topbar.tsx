@@ -119,7 +119,7 @@ export function Topbar() {
     setActionError(null);
     try {
       const result = await postDataUpload(file);
-      await refetch(); // new source node -> canvas fitView tracks it
+      await refetch(); // new source node lands in the SOURCE column ("N new" chip if off-screen)
       pushToast(
         `table ${result.table} added — ${result.rows} rows, ${result.columns.length} columns`,
         "success",
@@ -197,7 +197,7 @@ export function Topbar() {
             if (e.key === "Enter") void submitAsk();
           }}
           disabled={runActive || busy === "ask"}
-          placeholder="Ask the warehouse…"
+          placeholder="Ask a question about your data…"
           className="w-full max-w-md rounded border border-hairline bg-canvas px-3 py-1.5 text-[12px] text-text-primary placeholder:text-text-secondary disabled:cursor-not-allowed disabled:opacity-60"
         />
         <div className="mt-1 flex max-w-md gap-1.5">

@@ -39,12 +39,23 @@ export function reduceBoard(board: BoardState, envelope: EventEnvelope): BoardSt
     case "ontology_term_proposed": {
       const term = envelope.payload.term;
       const terms = upsertBy(board.terms, term);
+      // Object nodes carry meta.table (backend build_graph), which is the
+      // same table -> object mapping _on_event uses to anchor term edges.
+      const tableToObject = new Map(
+        board.graph.nodes.filter((n) => n.kind === "object").map((n) => [n.meta.table, n.id]),
+      );
       if (term.kind === "join") {
-        // ponytail: OntologyTerm carries no from/to endpoints, so a join
-        // proposal can't be turned into a graph edge from this payload
-        // alone (contracts.md's graph derivation models joins as edges,
-        // not nodes). It still surfaces via `terms` + the feed + approvals.
-        return { ...board, terms };
+        // A join is an edge, not a node (contracts.md graph derivation).
+        // Mirrors backend _on_event: edge id reuses the join term's id,
+        // endpoints resolved via source_tables = [from_table, to_table].
+        // Guards: both object nodes must exist, dedupe on edge id.
+        const source = tableToObject.get(term.source_tables[0] ?? "");
+        const target = tableToObject.get(term.source_tables[1] ?? "");
+        if (!source || !target || board.graph.edges.some((e) => e.id === term.id)) {
+          return { ...board, terms };
+        }
+        const edge: GraphEdge = { id: term.id, source, target, kind: "join" };
+        return { ...board, terms, graph: { ...board.graph, edges: [...board.graph.edges, edge] } };
       }
       const meta: Record<string, string> =
         term.kind === "metric"
@@ -57,11 +68,21 @@ export function reduceBoard(board: BoardState, envelope: EventEnvelope): BoardSt
         status: term.status,
         meta,
       };
-      return {
-        ...board,
-        terms,
-        graph: { ...board.graph, nodes: upsertBy(board.graph.nodes, node) },
-      };
+      const nodes = upsertBy(board.graph.nodes, node);
+      // Mirrors backend's e_derives_<metric_id>_<table> edges (metric -> object)
+      // emitted at proposal time, so proposed metrics never float unconnected.
+      // Same guards as _on_event: object node must exist, dedupe on edge id.
+      let edges = board.graph.edges;
+      if (term.kind === "metric") {
+        for (const table of term.source_tables) {
+          const objectId = tableToObject.get(table);
+          if (!objectId) continue;
+          const edgeId = `e_derives_${term.id}_${table}`;
+          if (edges.some((e) => e.id === edgeId)) continue;
+          edges = [...edges, { id: edgeId, source: term.id, target: objectId, kind: "derives" }];
+        }
+      }
+      return { ...board, terms, graph: { nodes, edges } };
     }
 
     case "insight": {
