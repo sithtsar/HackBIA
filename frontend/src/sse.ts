@@ -55,6 +55,7 @@ export function connectEvents({ onEvent, onStatus }: SseHandlers): () => void {
     if (source?.readyState !== EventSource.OPEN) {
       backoff = BACKOFF_START_MS;
       if (retryTimer) clearTimeout(retryTimer);
+      source?.close();
       connect();
     }
   };

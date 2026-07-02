@@ -44,7 +44,7 @@ describe("reduceBoard", () => {
     });
   });
 
-  test("insight appends an insight node keyed by run_id and a produces edge per node_id", () => {
+  test("insight appends an insight node keyed by run_id and adds no edges", () => {
     const board = emptyBoard();
     const e = envelope<EventEnvelope>({
       id: "evt_2",
@@ -67,11 +67,10 @@ describe("reduceBoard", () => {
       status: "neutral",
       meta: { severity: "warning" },
     });
-    expect(next.graph.edges).toHaveLength(2);
-    expect(next.graph.edges.map((edge) => [edge.source, edge.target, edge.kind])).toEqual([
-      ["obj_ticket", "insight_run_b", "produces"],
-      ["m_churn_risk", "insight_run_b", "produces"],
-    ]);
+    // Backend only ever serves insight -> action produces edges from
+    // GET /api/state; node_ids -> insight edges are not part of the
+    // contract, so the reducer must not derive its own.
+    expect(next.graph.edges).toHaveLength(0);
   });
 
   test("action_proposed appends an action node and an insight->action produces edge", () => {

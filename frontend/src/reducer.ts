@@ -65,18 +65,19 @@ export function reduceBoard(board: BoardState, envelope: EventEnvelope): BoardSt
     }
 
     case "insight": {
-      const { text, severity, node_ids } = envelope.payload;
+      const { text, severity } = envelope.payload;
       // Matches backend/app/main.py's _on_event insight node id scheme
       // (run_id-keyed, falls back to event id) so a later GET /api/state
       // refetch upserts the same node instead of duplicating it.
       const id = `insight_${envelope.run_id || envelope.id}`;
       const node: GraphNode = { id, kind: "insight", label: text, status: "neutral", meta: { severity } };
       const nodes = upsertBy(board.graph.nodes, node);
-      let edges = board.graph.edges;
-      for (const sourceId of node_ids) {
-        edges = upsertEdge(edges, sourceId, id, "produces");
-      }
-      return { ...board, graph: { nodes, edges } };
+      // No node_ids -> insight edges here: contracts.md says the backend
+      // builds produces edges and the UI never derives its own, and
+      // GET /api/state only ever serves insight -> action produces edges
+      // (see the action_proposed case below). Adding one here would get
+      // silently dropped on the next refetch and jump the dagre layout.
+      return { ...board, graph: { ...board.graph, nodes } };
     }
 
     case "action_proposed": {

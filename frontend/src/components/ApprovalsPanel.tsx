@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type { ActionProposal, OntologyTerm, PendingItem } from "../types";
 import { postApproval, type ApprovalDecision } from "../api";
-import { useStore } from "../store";
 import { PanelHeader } from "./PanelHeader";
 
 type ApprovalsPanelProps = {
@@ -42,7 +41,6 @@ function toRow(item: PendingItem, terms: OntologyTerm[], actions: ActionProposal
 }
 
 export function ApprovalsPanel({ pending, terms, actions }: ApprovalsPanelProps) {
-  const { refetch } = useStore();
   const [inFlight, setInFlight] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,7 +53,6 @@ export function ApprovalsPanel({ pending, terms, actions }: ApprovalsPanelProps)
     setError(null);
     try {
       await postApproval(subjectId, decision);
-      await refetch();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

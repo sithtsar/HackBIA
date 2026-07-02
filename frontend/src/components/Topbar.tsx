@@ -11,6 +11,10 @@ const DOT_COLOR: Record<ConnectionStatus, string> = {
 
 const MANUAL_BASELINE = "45:00";
 
+// ponytail: module-level counter, not a UUID lib — same-millisecond local
+// error envelopes would otherwise collide on React key.
+let localErrorSeq = 0;
+
 function pad2(n: number): string {
   return n.toString().padStart(2, "0");
 }
@@ -50,7 +54,7 @@ export function Topbar() {
     // A failed POST (network/HTTP error) has no matching SSE `error` event —
     // surface it the same way a server-side error would via the feed/toast.
     applyEvent({
-      id: `local_${Date.now()}`,
+      id: `local_${Date.now()}_${localErrorSeq++}`,
       ts: new Date().toISOString(),
       run_id: "",
       type: "error",
