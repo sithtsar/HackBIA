@@ -10,15 +10,20 @@ files; ontology.yaml + events.jsonl are the durable state).
 from __future__ import annotations
 
 import asyncio
+import uuid
 from contextlib import asynccontextmanager
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException
+from dotenv import load_dotenv
+from fastapi import FastAPI
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
+from . import agents
 from . import ontology as onto_mod
 from .events import DEMO_EVENTS_FILE, Envelope, EventBus, replay as replay_events
+
+load_dotenv()
 
 bus = EventBus()
 
@@ -115,14 +120,26 @@ async def sse_events() -> EventSourceResponse:
     return EventSourceResponse(gen())
 
 
+class AskBody(BaseModel):
+    question: str
+
+
+def _new_run_id() -> str:
+    return f"run_{uuid.uuid4().hex[:8]}"
+
+
 @app.post("/api/ontology/draft")
-async def ontology_draft() -> None:
-    raise HTTPException(status_code=501, detail="ontology-drafter agent not implemented yet (Task 2)")
+async def ontology_draft() -> dict[str, str]:
+    run_id = _new_run_id()
+    asyncio.create_task(agents.run_ontology_draft(bus, run_id))
+    return {"run_id": run_id}
 
 
 @app.post("/api/ask")
-async def ask() -> None:
-    raise HTTPException(status_code=501, detail="query agent not implemented yet (Task 2)")
+async def ask(body: AskBody) -> dict[str, str]:
+    run_id = _new_run_id()
+    asyncio.create_task(agents.run_ask(bus, run_id, body.question))
+    return {"run_id": run_id}
 
 
 @app.post("/api/approvals/{subject_id}")

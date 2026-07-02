@@ -36,7 +36,15 @@ def test_get_state_returns_graph_terms_actions_pending():
     assert body["pending"] == []
 
 
-def test_draft_and_ask_are_501_stubs():
+def test_draft_and_ask_return_run_id(monkeypatch):
+    # Stub the agent entrypoints so the route wiring is tested without any
+    # LLM/network call (the background tasks are scheduled but no-op).
+    async def _noop(*a, **k):
+        return None
+
+    monkeypatch.setattr(main.agents, "run_ontology_draft", _noop)
+    monkeypatch.setattr(main.agents, "run_ask", _noop)
+
     async def run():
         async with _client() as c:
             r1 = await c.post("/api/ontology/draft", json={})
@@ -44,8 +52,10 @@ def test_draft_and_ask_are_501_stubs():
             return r1, r2
 
     r1, r2 = asyncio.run(run())
-    assert r1.status_code == 501
-    assert r2.status_code == 501
+    assert r1.status_code == 200
+    assert r1.json()["run_id"].startswith("run_")
+    assert r2.status_code == 200
+    assert r2.json()["run_id"].startswith("run_")
 
 
 def test_approvals_mutate_yaml_and_emit_event():
