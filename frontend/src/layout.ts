@@ -49,8 +49,8 @@ const UNRANKED = Number.MAX_SAFE_INTEGER;
 export function layoutGraph(nodes: GraphNode[], edges: GraphEdge[]): PositionedNode[] {
   const byId = new Map(nodes.map((n) => [n.id, n]));
 
-  // Undirected adjacency: contract edges point both ways relative to the
-  // visual order (e.g. `derives` is metric -> object).
+  // Undirected adjacency: barycenter ordering only needs who touches whom,
+  // not edge direction.
   const neighbors = new Map<string, string[]>();
   const link = (a: string, b: string): void => {
     const list = neighbors.get(a);

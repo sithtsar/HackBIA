@@ -33,8 +33,8 @@ def test_build_graph_node_and_edge_counts():
     assert join_edge["target"] == "obj_customer"
 
     derives_edge = next(e for e in graph["edges"] if e["kind"] == "derives")
-    assert derives_edge["source"] == "m_active_customer"
-    assert derives_edge["target"] == "obj_order"
+    assert derives_edge["source"] == "obj_order"
+    assert derives_edge["target"] == "m_active_customer"
 
 
 def test_build_graph_merges_extra_nodes_and_edges():

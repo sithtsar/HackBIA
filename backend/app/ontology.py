@@ -3,7 +3,7 @@
 Graph derivation rules (docs/contracts.md):
   nodes = sources + objects + metrics (+ insights/actions appended by events)
   edges = table->object (feeds), joins between objects (join),
-          metric->its objects (derives), insight->action (produces)
+          object->metric (derives, data-flow direction), insight->action (produces)
 
 Node/edge id conventions (not specified by contracts.md, chosen to match
 frontend/src/fixtures/state.json which the board-shell task already built
@@ -93,7 +93,7 @@ def build_graph(
         for table in m.get("source_tables", []):
             obj_id = table_to_object.get(table)
             if obj_id:
-                edges.append({"id": f"e_derives_{m['id']}_{table}", "source": m["id"], "target": obj_id, "kind": "derives"})
+                edges.append({"id": f"e_derives_{m['id']}_{table}", "source": obj_id, "target": m["id"], "kind": "derives"})
 
     nodes.extend(extra_nodes or [])
     edges.extend(extra_edges or [])

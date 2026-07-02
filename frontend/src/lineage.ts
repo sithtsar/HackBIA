@@ -4,10 +4,11 @@ export type Lineage = { nodeIds: Set<string>; edgeIds: Set<string> };
 
 /**
  * The upstream neighbor of `current` across one edge, or null if this edge
- * doesn't lead upstream from it. Orientation per contracts.md:
+ * doesn't lead upstream from it. Orientation per contracts.md — every directed
+ * edge points WITH the data flow, so upstream is always target -> source:
  *   feeds    source -> object   : upstream of the object is the source
  *   join     object <-> object  : undirected, either endpoint pulls the other
- *   derives  metric -> object   : upstream of a metric is its object (follow FROM the metric)
+ *   derives  object -> metric   : upstream of a metric is its object
  *   produces insight -> action  : upstream of the action is the insight
  * Only actual edges are followed — insight node_ids are not edges, so we never invent them.
  */
@@ -15,9 +16,8 @@ function upstreamNeighbor(edge: GraphEdge, current: string): string | null {
   switch (edge.kind) {
     case "feeds":
     case "produces":
-      return edge.target === current ? edge.source : null;
     case "derives":
-      return edge.source === current ? edge.target : null;
+      return edge.target === current ? edge.source : null;
     case "join":
       if (edge.source === current) return edge.target;
       if (edge.target === current) return edge.source;

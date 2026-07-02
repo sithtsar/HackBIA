@@ -24,9 +24,9 @@
       { "id": "join_orders_customers", "source": "obj_order", "target": "obj_customer", "kind": "join" },
       { "id": "join_tickets_customers", "source": "obj_ticket", "target": "obj_customer", "kind": "join" },
 
-      { "id": "e_derives_active_customer", "source": "m_active_customer", "target": "obj_order", "kind": "derives" },
-      { "id": "e_derives_churn_risk", "source": "m_churn_risk", "target": "obj_ticket", "kind": "derives" },
-      { "id": "e_derives_avg_order_value", "source": "m_avg_order_value", "target": "obj_order", "kind": "derives" },
+      { "id": "e_derives_active_customer", "source": "obj_order", "target": "m_active_customer", "kind": "derives" },
+      { "id": "e_derives_churn_risk", "source": "obj_ticket", "target": "m_churn_risk", "kind": "derives" },
+      { "id": "e_derives_avg_order_value", "source": "obj_order", "target": "m_avg_order_value", "kind": "derives" },
 
       { "id": "e_produces_act_0001", "source": "insight_ticket_spike", "target": "act_0001", "kind": "produces" }
     ]

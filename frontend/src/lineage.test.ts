@@ -3,7 +3,7 @@ import { upstream } from "./lineage";
 import type { GraphEdge, GraphNode } from "./types";
 
 // sources -> objects (feeds), object <-> object (join), metric -> object
-// (derives), insight -> action (produces).
+// (derives, object -> metric), insight -> action (produces).
 const nodes: GraphNode[] = [
   { id: "customers", kind: "source", label: "customers", status: "neutral", meta: {} },
   { id: "orders", kind: "source", label: "orders", status: "neutral", meta: {} },
@@ -17,7 +17,7 @@ const edges: GraphEdge[] = [
   { id: "e_feeds_customers", source: "customers", target: "obj_customer", kind: "feeds" },
   { id: "e_feeds_orders", source: "orders", target: "obj_order", kind: "feeds" },
   { id: "e_join", source: "obj_order", target: "obj_customer", kind: "join" },
-  { id: "e_derives", source: "m_active", target: "obj_order", kind: "derives" },
+  { id: "e_derives", source: "obj_order", target: "m_active", kind: "derives" },
   // Insight evidence edges (backend/main.py _on_event + reducer.ts insight
   // case): node_ids from the insight payload -> produces edges into the
   // insight node, same id scheme as the produces edge below.
@@ -30,7 +30,7 @@ const graph = { nodes, edges };
 describe("upstream", () => {
   test("metric walks derives -> object -> (join sibling + feeds sources), includes itself", () => {
     const { nodeIds, edgeIds } = upstream(graph, "m_active");
-    // m_active -> obj_order (derives), obj_order <-> obj_customer (join),
+    // obj_order -> m_active (derives), obj_order <-> obj_customer (join),
     // obj_order <- orders (feeds), obj_customer <- customers (feeds).
     expect([...nodeIds].sort()).toEqual(
       ["customers", "m_active", "obj_customer", "obj_order", "orders"].sort(),

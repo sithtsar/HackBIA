@@ -79,12 +79,12 @@ describe("reduceBoard", () => {
     const twice = reduceBoard(once, e); // replay + live can re-emit
 
     // Same id scheme as backend build_graph: e_derives_<metric_id>_<table>,
-    // metric -> object; tables with no object node are skipped.
+    // object -> metric (data-flow direction); tables with no object node are skipped.
     expect(once.graph.edges).toHaveLength(1);
     expect(once.graph.edges[0]).toMatchObject({
       id: "e_derives_m_churn_risk_orders",
-      source: "m_churn_risk",
-      target: "obj_order",
+      source: "obj_order",
+      target: "m_churn_risk",
       kind: "derives",
     });
     expect(twice.graph.edges).toHaveLength(1);

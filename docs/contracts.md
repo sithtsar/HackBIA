@@ -109,7 +109,7 @@ metrics:
 
 Graph derivation (backend builds, UI never derives):
 nodes = sources + objects + metrics (+ insights/actions appended by events);
-edges = table→object (`feeds`), joins between objects (`join`), metric→its objects (`derives`), insight→action (`produces`), insight-evidence node→insight (`produces`).
+edges = table→object (`feeds`), joins between objects (`join`), object→metric (`derives`), insight→action (`produces`), insight-evidence node→insight (`produces`). Every directed edge points WITH the data flow (left→right on the board: source → object → metric → insight → action); `edge_traversed` payloads use the same orientation.
 A `proposed` term appears WITH its edges the moment `ontology_term_proposed` fires (metric → `derives`, join → `join`) — no floating nodes awaiting approval. These event-driven edges are appended server-side in `_on_event` AND mirrored in the client reducer with identical ids/guards (existence + dedupe), so live view and refetch always agree.
 
 LLM output contract (backend): every LLM call goes through **BAML** (`baml-py`) — functions and output classes defined in `baml_src/*.baml`, generated client committed at `baml_client/`. Cerebras is wired as an `openai-generic` client (`base_url https://api.cerebras.ai/v1`, key ONLY from env `CEREBRAS_API_KEY`, retry_policy max 2 retries with exponential backoff). BAML's Schema-Aligned Parsing is the fault-tolerance layer (markdown fences, trailing commas, type coercion); output class shapes match the Core objects above exactly. Parse/validation exhaustion emits an `error` event and ends the run. No unvalidated LLM dict ever reaches the event bus or ontology.yaml. Regenerate after editing `.baml` files: `uv run baml-cli generate`.

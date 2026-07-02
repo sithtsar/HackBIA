@@ -81,7 +81,7 @@ def _on_event(env: Envelope) -> None:
                 if obj_id is None:
                     continue  # skip: no matching object node for this table (yet)
                 edge_id = f"e_derives_{term['id']}_{table}"
-                _term_edges[edge_id] = {"id": edge_id, "source": term["id"], "target": obj_id, "kind": "derives"}
+                _term_edges[edge_id] = {"id": edge_id, "source": obj_id, "target": term["id"], "kind": "derives"}
         elif term["kind"] == "join" and len(term["source_tables"]) >= 2:
             from_obj = table_to_object.get(term["source_tables"][0])
             to_obj = table_to_object.get(term["source_tables"][1])
@@ -147,7 +147,7 @@ async def get_state() -> dict[str, Any]:
     term_edges = [
         e for e in _term_edges.values()
         if not (e["kind"] == "join" and e["id"] in existing_join_ids)
-        and not (e["kind"] == "derives" and e["source"] in existing_metric_ids)
+        and not (e["kind"] == "derives" and e["target"] in existing_metric_ids)
     ]
     extra_nodes = term_nodes + list(_insight_nodes.values()) + list(_action_nodes.values())
     extra_edges = term_edges + list(_produces_edges.values())

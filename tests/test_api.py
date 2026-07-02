@@ -189,9 +189,9 @@ def test_proposed_metric_term_emits_node_and_derives_edges():
         "id": "m_test_metric", "kind": "metric", "label": "Test Metric",
         "status": "proposed", "meta": {"confidence": "0.7"},
     }]
-    derives = [e for e in body["graph"]["edges"] if e["kind"] == "derives" and e["source"] == "m_test_metric"]
+    derives = [e for e in body["graph"]["edges"] if e["kind"] == "derives" and e["target"] == "m_test_metric"]
     assert derives == [{
-        "id": "e_derives_m_test_metric_orders", "source": "m_test_metric", "target": "obj_order", "kind": "derives",
+        "id": "e_derives_m_test_metric_orders", "source": "obj_order", "target": "m_test_metric", "kind": "derives",
     }]
 
 
@@ -241,7 +241,7 @@ def test_proposed_metric_node_dedupes_once_persisted_and_approved():
         r = asyncio.run(run())
         body = r.json()
         assert sum(1 for n in body["graph"]["nodes"] if n["id"] == "m_dedupe_test") == 1
-        derives = [e for e in body["graph"]["edges"] if e["kind"] == "derives" and e["source"] == "m_dedupe_test"]
+        derives = [e for e in body["graph"]["edges"] if e["kind"] == "derives" and e["target"] == "m_dedupe_test"]
         assert len(derives) == 1
         # the onto-derived node reflects the yaml (now approved), not the stale event copy
         node = next(n for n in body["graph"]["nodes"] if n["id"] == "m_dedupe_test")

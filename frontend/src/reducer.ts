@@ -69,9 +69,10 @@ export function reduceBoard(board: BoardState, envelope: EventEnvelope): BoardSt
         meta,
       };
       const nodes = upsertBy(board.graph.nodes, node);
-      // Mirrors backend's e_derives_<metric_id>_<table> edges (metric -> object)
-      // emitted at proposal time, so proposed metrics never float unconnected.
-      // Same guards as _on_event: object node must exist, dedupe on edge id.
+      // Mirrors backend's e_derives_<metric_id>_<table> edges (object -> metric,
+      // data-flow direction) emitted at proposal time, so proposed metrics never
+      // float unconnected. Same guards as _on_event: object node must exist,
+      // dedupe on edge id.
       let edges = board.graph.edges;
       if (term.kind === "metric") {
         for (const table of term.source_tables) {
@@ -79,7 +80,7 @@ export function reduceBoard(board: BoardState, envelope: EventEnvelope): BoardSt
           if (!objectId) continue;
           const edgeId = `e_derives_${term.id}_${table}`;
           if (edges.some((e) => e.id === edgeId)) continue;
-          edges = [...edges, { id: edgeId, source: term.id, target: objectId, kind: "derives" }];
+          edges = [...edges, { id: edgeId, source: objectId, target: term.id, kind: "derives" }];
         }
       }
       return { ...board, terms, graph: { nodes, edges } };
