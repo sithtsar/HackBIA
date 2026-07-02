@@ -6,9 +6,11 @@ import { AgentFeedPanel } from "./components/AgentFeedPanel";
 import { ApprovalsPanel } from "./components/ApprovalsPanel";
 import { PanelHeader } from "./components/PanelHeader";
 import { Toasts } from "./components/Toasts";
+import { DetailPanel } from "./components/DetailPanel";
 
 function Board() {
-  const { state, status, error, activeNodeIds, activeEdgeKeys } = useStore();
+  const { state, status, error, activeNodeIds, activeEdgeKeys, selectedId, setSelectedId } =
+    useStore();
 
   return (
     <div className="grid h-screen grid-rows-[48px_1fr] overflow-hidden bg-canvas text-text-primary">
@@ -17,16 +19,21 @@ function Board() {
       <div className="grid min-h-0 grid-cols-[1fr_340px]">
         <main className="flex min-h-0 min-w-0 flex-col border-r border-hairline">
           <PanelHeader>Lineage</PanelHeader>
-          <div className="min-h-0 flex-1">
+          <div className="relative min-h-0 flex-1">
             {status === "error" ? (
               <BackendOfflinePanel message={error} />
             ) : (
-              <Canvas
-                nodes={state.graph.nodes}
-                edges={state.graph.edges}
-                activeNodeIds={activeNodeIds}
-                activeEdgeKeys={activeEdgeKeys}
-              />
+              <>
+                <Canvas
+                  nodes={state.graph.nodes}
+                  edges={state.graph.edges}
+                  activeNodeIds={activeNodeIds}
+                  activeEdgeKeys={activeEdgeKeys}
+                  selectedId={selectedId}
+                  onSelect={setSelectedId}
+                />
+                <DetailPanel />
+              </>
             )}
           </div>
         </main>

@@ -53,6 +53,9 @@ export type StoreValue = {
   dismissToast: (id: string) => void;
   /** Push a toast outside the SSE stream (e.g. an upload success confirmation). */
   pushToast: (message: string, kind: ToastKind) => void;
+  /** Currently selected graph node / action id, or null. UI-only (not event-sourced). */
+  selectedId: string | null;
+  setSelectedId: (id: string | null) => void;
 };
 
 const StoreContext = createContext<StoreValue | null>(null);
@@ -67,6 +70,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [activeEdgeKeys, setActiveEdgeKeys] = useState<ReadonlySet<string>>(new Set<string>());
   const [run, setRun] = useState<RunTiming>(NO_RUN);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const refetch = async (): Promise<void> => {
     setStatus("loading");
@@ -168,6 +172,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     toasts,
     dismissToast,
     pushToast,
+    selectedId,
+    setSelectedId,
   };
 
   return createElement(StoreContext.Provider, { value }, children);
