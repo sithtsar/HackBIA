@@ -49,6 +49,14 @@ def test_guard_rejects_empty():
     assert agents.guard_sql("   ") is not None
 
 
+def test_guard_rejects_lowercase_injection():
+    assert agents.guard_sql("select 1; drop table x") is not None
+
+
+def test_guard_rejects_comment_prefixed_dml():
+    assert agents.guard_sql("/* hi */ DELETE FROM orders") is not None
+
+
 # --- FK inference on the seeded duckdb --------------------------------------
 
 def test_fk_inference_finds_the_two_known_joins():
@@ -140,6 +148,79 @@ def test_run_ask_ticket_question_fires_insight_and_action(monkeypatch):
     # insight precedes the action it produces, both precede run_completed
     assert types.index("insight") < types.index("action_proposed")
     assert types.index("action_proposed") < types.index("run_completed")
+
+
+def test_run_ontology_draft_mocked_llm(monkeypatch, tmp_path):
+    # Isolate ontology.yaml: copy to tmp_path and repoint load/save (their
+    # `path` defaults are bound at def-time, so patch the module functions
+    # rather than the ONTOLOGY_PATH constant, which reassigning wouldn't affect).
+    tmp_yaml = tmp_path / "ontology.yaml"
+    tmp_yaml.write_text(agents.onto_mod.ONTOLOGY_PATH.read_text())
+    real_load, real_save = agents.onto_mod.load_ontology, agents.onto_mod.save_ontology
+    monkeypatch.setattr(agents.onto_mod, "load_ontology", lambda path=tmp_yaml: real_load(path))
+    monkeypatch.setattr(agents.onto_mod, "save_ontology", lambda onto, path=tmp_yaml: real_save(onto, path))
+
+    baseline = real_load(tmp_yaml)
+    baseline_metrics = {m["id"]: dict(m) for m in baseline["metrics"]}
+    baseline_joins = {j["id"]: dict(j) for j in baseline["joins"]}
+
+    def fake_llm_json(system, user, max_tokens=None):
+        return {"metrics": [
+            {"id": "m_full_conf", "name": "Full Confidence Metric", "definition": "silly but valid",
+             "sql": "SELECT count(*) AS n FROM customers", "source_tables": ["customers"],
+             "confidence": 1.0},  # self-reported max confidence -> must be capped
+            {"id": "m_bad_sql", "name": "Bad SQL Metric", "definition": "deliberately broken",
+             "sql": "SELECT * FROM not_a_real_table", "source_tables": ["customers"],
+             "confidence": 0.7},  # fails EXPLAIN -> forced to low confidence
+        ]}
+
+    monkeypatch.setattr(agents, "llm_json", fake_llm_json)
+
+    bus = EventBus()
+    envs: list = []
+    bus.add_listener(lambda env: envs.append(env))
+
+    async def go():
+        bus.bind_loop(asyncio.get_running_loop())
+        await agents.run_ontology_draft(bus, "run_draft")
+
+    asyncio.run(go())
+
+    types = [e.type for e in envs]
+    assert types[0] == "run_started"
+    assert types[-1] == "run_completed"
+
+    metric_terms = {
+        e.payload["term"]["id"]: e.payload["term"]
+        for e in envs if e.type == "ontology_term_proposed" and e.payload["term"]["kind"] == "metric"
+    }
+    assert {"m_full_conf", "m_bad_sql"} <= metric_terms.keys()
+
+    # a. every LLM metric term lands with confidence <= 0.85 (the cap)
+    for term in metric_terms.values():
+        assert term["confidence"] <= 0.85
+    assert metric_terms["m_bad_sql"]["confidence"] <= 0.35  # + failed EXPLAIN drops it further
+
+    # b. every LLM metric emits approval_required regardless of confidence
+    approval_subjects = {e.payload["subject_id"] for e in envs if e.type == "approval_required"}
+    assert "m_full_conf" in approval_subjects  # confidence 0.85, still gated
+    assert "m_bad_sql" in approval_subjects
+
+    # c. deterministic join terms only emit approval_required when confidence < 0.9
+    join_terms = {
+        e.payload["term"]["id"]: e.payload["term"]["confidence"]
+        for e in envs if e.type == "ontology_term_proposed" and e.payload["term"]["kind"] == "join"
+    }
+    assert join_terms  # the seeded db's two FK joins were (re)proposed
+    for jid, conf in join_terms.items():
+        assert (jid in approval_subjects) == (conf < 0.9)
+
+    # d. pre-existing approved baseline entries are untouched (merge-by-id no-clobber)
+    reloaded = real_load(tmp_yaml)
+    for mid, orig in baseline_metrics.items():
+        assert next(m for m in reloaded["metrics"] if m["id"] == mid) == orig
+    for jid, orig in baseline_joins.items():
+        assert next(j for j in reloaded["joins"] if j["id"] == jid) == orig
 
 
 # --- Live LLM smoke (excluded by default) -----------------------------------

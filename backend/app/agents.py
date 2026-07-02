@@ -455,7 +455,9 @@ def _emit_lineage(bus: EventBus, run_id: str, onto: dict[str, Any], term_ids: li
                 touch(f"src_{table}")
                 bus.publish("edge_traversed", {"source": f"src_{table}", "target": obj}, run_id)
                 touch_obj(obj)
-                bus.publish("edge_traversed", {"source": obj, "target": tid}, run_id)
+                # derives edge: source=metric, target=object (matches ontology.py's
+                # build_graph, which emits e_derives_<metric>_<table> as metric->object).
+                bus.publish("edge_traversed", {"source": tid, "target": obj}, run_id)
             touch(tid)
     return touched_objects
 
