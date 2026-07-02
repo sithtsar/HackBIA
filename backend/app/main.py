@@ -15,11 +15,12 @@ from contextlib import asynccontextmanager
 from typing import Any, Literal
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from . import agents
+from . import ingest as ingest_mod
 from . import ontology as onto_mod
 from .actions import ActionPushError, push_action
 from .events import DEMO_EVENTS_FILE, ActionProposal, Envelope, EventBus, replay as replay_events
@@ -184,6 +185,17 @@ async def _push_and_emit(action: ActionProposal) -> None:
         bus.publish("error", {"message": f"action push failed: {type(exc).__name__}: {exc}"})
         return
     bus.publish("action_pushed", {"action_id": action.id, "external_url": url})
+
+
+@app.post("/api/data/upload")
+async def upload_data(file: UploadFile = File(...), table: str | None = Form(None)) -> dict[str, Any]:
+    content = await file.read()
+    try:
+        result = await asyncio.to_thread(ingest_mod.ingest_csv, content, file.filename or "", table)
+    except ingest_mod.IngestError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    bus.publish("status", {"message": f"ingested table {result.table}: {result.rows} rows, {len(result.columns)} columns"})
+    return {"table": result.table, "rows": result.rows, "columns": result.columns}
 
 
 @app.post("/api/replay")

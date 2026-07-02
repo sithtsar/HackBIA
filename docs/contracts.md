@@ -121,6 +121,7 @@ edges = table→object (`feeds`), joins between objects (`join`), metric→its o
 | `POST /api/ask` | `{ question: string }` | `{ run_id }` |
 | `POST /api/approvals/{subject_id}` | `{ decision: "approved"\|"rejected" }` | `{ ok: true }` (emits approval_resolved; approved action → push → action_pushed) |
 | `POST /api/replay` | `{ file?: string, speed?: number }` | `{ ok: true }` (default file `backend/data/demo_events.jsonl`, speed 4 = 4x; re-emits envelopes onto the live bus with fresh ts) |
+| `POST /api/data/upload` | multipart: `file` (CSV, required), `table` (optional name; default = sanitized filename stem) | `{ table: string, rows: number, columns: {name: string, type: string}[] }` (loads into `foundry.duckdb`, appends `{table}` to ontology.yaml `sources:` if absent, emits a `status` event; 400 bad name/CSV, 413 over 20MB) |
 
 Every event emitted on the bus is also appended to `backend/data/events.jsonl` (one JSON per line). Replay reads a jsonl and re-emits. That file doubles as demo insurance.
 
