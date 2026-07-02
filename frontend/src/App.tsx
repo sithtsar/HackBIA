@@ -5,13 +5,15 @@ import { BackendOfflinePanel } from "./components/BackendOfflinePanel";
 import { AgentFeedPanel } from "./components/AgentFeedPanel";
 import { ApprovalsPanel } from "./components/ApprovalsPanel";
 import { PanelHeader } from "./components/PanelHeader";
+import { Toasts } from "./components/Toasts";
 
 function Board() {
-  const { state, status, error } = useStore();
+  const { state, status, error, activeNodeIds, activeEdgeKeys } = useStore();
 
   return (
     <div className="grid h-screen grid-rows-[48px_1fr] overflow-hidden bg-canvas text-text-primary">
-      <Topbar status={status} />
+      <Topbar />
+      <Toasts />
       <div className="grid min-h-0 grid-cols-[1fr_340px]">
         <main className="flex min-h-0 min-w-0 flex-col border-r border-hairline">
           <PanelHeader>Lineage</PanelHeader>
@@ -19,7 +21,12 @@ function Board() {
             {status === "error" ? (
               <BackendOfflinePanel message={error} />
             ) : (
-              <Canvas nodes={state.graph.nodes} edges={state.graph.edges} />
+              <Canvas
+                nodes={state.graph.nodes}
+                edges={state.graph.edges}
+                activeNodeIds={activeNodeIds}
+                activeEdgeKeys={activeEdgeKeys}
+              />
             )}
           </div>
         </main>

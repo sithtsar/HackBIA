@@ -16,31 +16,47 @@ const nodeTypes = { foundry: FoundryNode };
 type CanvasProps = {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  activeNodeIds: ReadonlySet<string>;
+  activeEdgeKeys: ReadonlySet<string>;
 };
 
-export function Canvas({ nodes, edges }: CanvasProps) {
+export function Canvas({ nodes, edges, activeNodeIds, activeEdgeKeys }: CanvasProps) {
+  // New nodes (from insight/action/ontology_term_proposed events) simply
+  // change the `nodes` array reference, which re-runs this full dagre
+  // layout — no incremental positioning needed for this board's scale.
   const flowNodes = useMemo<FoundryFlowNode[]>(() => {
     const positioned = layoutGraph(nodes, edges);
     return positioned.map((node) => ({
       id: node.id,
       type: "foundry",
       position: { x: node.x - NODE_WIDTH / 2, y: node.y - NODE_HEIGHT / 2 },
-      data: { label: node.label, kind: node.kind, status: node.status },
+      data: {
+        label: node.label,
+        kind: node.kind,
+        status: node.status,
+        meta: node.meta,
+        active: activeNodeIds.has(node.id),
+      },
     }));
-  }, [nodes, edges]);
+  }, [nodes, edges, activeNodeIds]);
 
   const flowEdges = useMemo<Edge[]>(
     () =>
-      edges.map((edge) => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        style: {
-          stroke: "var(--color-hairline)",
-          strokeDasharray: edge.kind === "join" ? "4 3" : undefined,
-        },
-      })),
-    [edges],
+      edges.map((edge) => {
+        const active = activeEdgeKeys.has(`${edge.source}::${edge.target}`);
+        return {
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          animated: active,
+          style: {
+            stroke: active ? "var(--color-agent-blue)" : "var(--color-hairline)",
+            strokeWidth: active ? 2 : 1,
+            strokeDasharray: edge.kind === "join" ? "4 3" : undefined,
+          },
+        };
+      }),
+    [edges, activeEdgeKeys],
   );
 
   return (

@@ -3,12 +3,15 @@ import {
   createElement,
   useContext,
   useEffect,
-  useMemo,
   useState,
   type ReactNode,
 } from "react";
 import type { BoardState, EventEnvelope } from "./types";
 import { fetchState } from "./api";
+import { reduceBoard } from "./reducer";
+import { connectEvents, type ConnectionStatus } from "./sse";
+
+export type { ConnectionStatus } from "./sse";
 
 const EMPTY_STATE: BoardState = {
   graph: { nodes: [], edges: [] },
@@ -17,7 +20,17 @@ const EMPTY_STATE: BoardState = {
   pending: [],
 };
 
+const ACTIVITY_DECAY_MS = 2000;
+const FEED_CAP = 200;
+const TOAST_TTL_MS = 6000;
+
 export type FetchStatus = "loading" | "ready" | "error";
+
+export type RunTiming = { startedAt: number | null; endedAt: number | null };
+
+export type ToastItem = { id: string; message: string };
+
+const NO_RUN: RunTiming = { startedAt: null, endedAt: null };
 
 export type StoreValue = {
   state: BoardState;
@@ -25,14 +38,18 @@ export type StoreValue = {
   error: string | null;
   /** Re-fetch GET /api/state and replace the whole board state. */
   refetch: () => Promise<void>;
-  /**
-   * Seam for Task 5: the SSE client will call this with each event envelope
-   * and it will reduce the envelope into `state` (node_touched glow,
-   * approval_resolved status flips, etc.) without restructuring this store.
-   * Deliberately unimplemented here — Task 4 only renders the initial
-   * GET /api/state snapshot.
-   */
+  /** Reduces one SSE envelope into `state` (+ feed/activity/run/toasts). */
   applyEvent: (envelope: EventEnvelope) => void;
+  /** Live envelopes, oldest first, capped at the last 200. */
+  feed: EventEnvelope[];
+  /** SSE connection health, drives the topbar status dot. */
+  connectionStatus: ConnectionStatus;
+  /** Node/edge ids touched in the last ~2s (node_touched/edge_traversed glow). Edge keys are `${source}::${target}`. */
+  activeNodeIds: ReadonlySet<string>;
+  activeEdgeKeys: ReadonlySet<string>;
+  run: RunTiming;
+  toasts: ToastItem[];
+  dismissToast: (id: string) => void;
 };
 
 const StoreContext = createContext<StoreValue | null>(null);
@@ -41,6 +58,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<BoardState>(EMPTY_STATE);
   const [status, setStatus] = useState<FetchStatus>("loading");
   const [error, setError] = useState<string | null>(null);
+  const [feed, setFeed] = useState<EventEnvelope[]>([]);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("reconnecting");
+  const [activeNodeIds, setActiveNodeIds] = useState<ReadonlySet<string>>(new Set<string>());
+  const [activeEdgeKeys, setActiveEdgeKeys] = useState<ReadonlySet<string>>(new Set<string>());
+  const [run, setRun] = useState<RunTiming>(NO_RUN);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const refetch = async (): Promise<void> => {
     setStatus("loading");
@@ -60,14 +83,88 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const applyEvent = (_envelope: EventEnvelope): void => {
-    throw new Error("wired in Task 5");
+  const markNodeActive = (id: string): void => {
+    setActiveNodeIds((prev) => new Set(prev).add(id));
+    setTimeout(() => {
+      setActiveNodeIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }, ACTIVITY_DECAY_MS);
   };
 
-  const value = useMemo<StoreValue>(
-    () => ({ state, status, error, refetch, applyEvent }),
-    [state, status, error],
-  );
+  const markEdgeActive = (source: string, target: string): void => {
+    const key = `${source}::${target}`;
+    setActiveEdgeKeys((prev) => new Set(prev).add(key));
+    setTimeout(() => {
+      setActiveEdgeKeys((prev) => {
+        if (!prev.has(key)) return prev;
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }, ACTIVITY_DECAY_MS);
+  };
+
+  const dismissToast = (id: string): void => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const pushToast = (message: string): void => {
+    const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    setToasts((prev) => [...prev, { id, message }]);
+    setTimeout(() => dismissToast(id), TOAST_TTL_MS);
+  };
+
+  const applyEvent = (envelope: EventEnvelope): void => {
+    setState((prev) => reduceBoard(prev, envelope));
+    setFeed((prev) => [...prev, envelope].slice(-FEED_CAP));
+
+    switch (envelope.type) {
+      case "node_touched":
+        markNodeActive(envelope.payload.node_id);
+        break;
+      case "edge_traversed":
+        markEdgeActive(envelope.payload.source, envelope.payload.target);
+        break;
+      case "run_started":
+        setRun({ startedAt: Date.now(), endedAt: null });
+        break;
+      case "run_completed":
+        setRun((prev) => ({ startedAt: prev.startedAt, endedAt: Date.now() }));
+        break;
+      case "error":
+        pushToast(envelope.payload.message);
+        break;
+      default:
+        break;
+    }
+  };
+
+  useEffect(() => {
+    // applyEvent only ever calls stable useState setters (several via the
+    // functional-update form), so the render-1 closure captured here stays
+    // correct for the app's lifetime — no need to reconnect on every render.
+    return connectEvents({ onEvent: applyEvent, onStatus: setConnectionStatus });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const value: StoreValue = {
+    state,
+    status,
+    error,
+    refetch,
+    applyEvent,
+    feed,
+    connectionStatus,
+    activeNodeIds,
+    activeEdgeKeys,
+    run,
+    toasts,
+    dismissToast,
+  };
 
   return createElement(StoreContext.Provider, { value }, children);
 }

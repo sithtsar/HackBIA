@@ -35,3 +35,40 @@ export async function postApproval(
     throw new Error(`POST /api/approvals/${subjectId} failed: ${res.status}`);
   }
 }
+
+export type RunHandle = { run_id: string };
+
+export async function postAsk(question: string): Promise<RunHandle> {
+  const res = await fetch("/api/ask", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /api/ask failed: ${res.status}`);
+  }
+  return (await res.json()) as RunHandle;
+}
+
+export async function postOntologyDraft(): Promise<RunHandle> {
+  const res = await fetch("/api/ontology/draft", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /api/ontology/draft failed: ${res.status}`);
+  }
+  return (await res.json()) as RunHandle;
+}
+
+export async function postReplay(): Promise<void> {
+  const res = await fetch("/api/replay", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /api/replay failed: ${res.status}`);
+  }
+}

@@ -54,30 +54,57 @@ export type BoardState = {
   pending: PendingItem[];
 };
 
-export type EventType =
-  | "run_started"
-  | "status"
-  | "node_touched"
-  | "edge_traversed"
-  | "ontology_term_proposed"
-  | "sql_generated"
-  | "sql_result"
-  | "insight"
-  | "action_proposed"
-  | "approval_required"
-  | "approval_resolved"
-  | "action_pushed"
-  | "run_completed"
-  | "error";
-
-// SSE `data:` payload. Payload shape varies per `type` (see contracts.md
-// "EventType -> payload" table); Task 5 narrows this when it builds the
-// reducer. Left as a record here since Task 4 only needs the envelope
-// shape for the store seam, not the payload contents.
-export type EventEnvelope = {
-  id: string;
-  ts: string;
-  run_id: string;
-  type: EventType;
-  payload: Record<string, unknown>;
+// Per-type payload shapes, copied verbatim from contracts.md's
+// "EventType -> payload" table (field names/optionality untouched).
+export type RunStartedPayload = { kind: "draft" | "ask" | "action"; input: string };
+export type StatusPayload = { message: string };
+export type NodeTouchedPayload = { node_id: string };
+export type EdgeTraversedPayload = { source: string; target: string };
+export type OntologyTermProposedPayload = { term: OntologyTerm };
+export type SqlGeneratedPayload = { sql: string; terms_used: string[] };
+export type SqlResultPayload = {
+  columns: string[];
+  rows: (string | number | null)[][];
+  row_count: number;
 };
+export type InsightPayload = {
+  text: string;
+  severity: "info" | "warning" | "critical";
+  node_ids: string[];
+};
+export type ActionProposedPayload = { action: ActionProposal };
+export type ApprovalRequiredPayload = {
+  subject_kind: "ontology_term" | "action";
+  subject_id: string;
+};
+export type ApprovalResolvedPayload = {
+  subject_kind: string;
+  subject_id: string;
+  decision: "approved" | "rejected";
+};
+export type ActionPushedPayload = { action_id: string; external_url: string };
+export type RunCompletedPayload = { summary: string };
+export type ErrorPayload = { message: string };
+
+type EnvelopeBase = { id: string; ts: string; run_id: string };
+
+// SSE `data:` payload: one JSON envelope per contracts.md's "Event envelope"
+// section, discriminated on `type` so the reducer (reducer.ts) gets a
+// narrowed `payload` per case with no casts.
+export type EventEnvelope =
+  | (EnvelopeBase & { type: "run_started"; payload: RunStartedPayload })
+  | (EnvelopeBase & { type: "status"; payload: StatusPayload })
+  | (EnvelopeBase & { type: "node_touched"; payload: NodeTouchedPayload })
+  | (EnvelopeBase & { type: "edge_traversed"; payload: EdgeTraversedPayload })
+  | (EnvelopeBase & { type: "ontology_term_proposed"; payload: OntologyTermProposedPayload })
+  | (EnvelopeBase & { type: "sql_generated"; payload: SqlGeneratedPayload })
+  | (EnvelopeBase & { type: "sql_result"; payload: SqlResultPayload })
+  | (EnvelopeBase & { type: "insight"; payload: InsightPayload })
+  | (EnvelopeBase & { type: "action_proposed"; payload: ActionProposedPayload })
+  | (EnvelopeBase & { type: "approval_required"; payload: ApprovalRequiredPayload })
+  | (EnvelopeBase & { type: "approval_resolved"; payload: ApprovalResolvedPayload })
+  | (EnvelopeBase & { type: "action_pushed"; payload: ActionPushedPayload })
+  | (EnvelopeBase & { type: "run_completed"; payload: RunCompletedPayload })
+  | (EnvelopeBase & { type: "error"; payload: ErrorPayload });
+
+export type EventType = EventEnvelope["type"];
