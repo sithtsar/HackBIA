@@ -1,9 +1,10 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   ReactFlow,
   Background,
   BackgroundVariant,
   Controls,
+  useReactFlow,
   type Edge,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -19,6 +20,23 @@ type CanvasProps = {
   activeNodeIds: ReadonlySet<string>;
   activeEdgeKeys: ReadonlySet<string>;
 };
+
+/**
+ * The `fitView` prop on <ReactFlow> only fits to the nodes it was mounted
+ * with (per xyflow docs: "initially provided"). Every SSE event re-runs
+ * dagre and can shift/add node positions, so without this the viewport
+ * silently drifts out of sync with where nodes actually are — new (or
+ * reflowed) nodes render fully off-screen with no error. Re-fitting here
+ * on every nodes/edges change, instead of once per event type in the
+ * reducer, keeps the whole graph on screen no matter which event caused it.
+ */
+function FitViewOnDataChange({ nodes, edges }: { nodes: GraphNode[]; edges: GraphEdge[] }) {
+  const { fitView } = useReactFlow();
+  useEffect(() => {
+    fitView();
+  }, [nodes, edges, fitView]);
+  return null;
+}
 
 export function Canvas({ nodes, edges, activeNodeIds, activeEdgeKeys }: CanvasProps) {
   // New nodes (from insight/action/ontology_term_proposed events) simply
@@ -73,6 +91,7 @@ export function Canvas({ nodes, edges, activeNodeIds, activeEdgeKeys }: CanvasPr
     >
       <Background variant={BackgroundVariant.Dots} color="#2B3444" gap={20} size={1} />
       <Controls showInteractive={false} className="foundry-controls" />
+      <FitViewOnDataChange nodes={nodes} edges={edges} />
     </ReactFlow>
   );
 }

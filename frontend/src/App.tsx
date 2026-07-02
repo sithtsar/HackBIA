@@ -30,7 +30,7 @@ function Board() {
             )}
           </div>
         </main>
-        <aside className="grid min-h-0 grid-rows-[60%_40%]">
+        <aside className="grid min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[60%_40%]">
           <AgentFeedPanel />
           <ApprovalsPanel pending={state.pending} terms={state.terms} actions={state.actions} />
         </aside>
