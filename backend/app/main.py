@@ -10,6 +10,7 @@ files; ontology.yaml + events.jsonl are the durable state).
 from __future__ import annotations
 
 import asyncio
+import re
 import shutil
 import uuid
 from contextlib import asynccontextmanager
@@ -284,6 +285,53 @@ async def ontology_join(body: JoinBody) -> dict[str, str]:
     bus.publish("ontology_term_proposed", {"term": term.model_dump()})
     bus.publish("approval_required", {"subject_kind": "ontology_term", "subject_id": jid})
     return {"term_id": jid}
+
+
+class MetricBody(BaseModel):
+    name: str
+    definition: str
+    sql: str = ""
+    source_tables: list[str]
+
+
+@app.post("/api/ontology/metric")
+async def ontology_metric(body: MetricBody) -> dict[str, str]:
+    """User-built metric (graph builder): no LLM — the user supplies the
+    definition, so it goes straight to a proposed term awaiting approval,
+    exactly like a draft-flow proposal."""
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(400, "name must not be empty")
+    if not body.source_tables:
+        raise HTTPException(400, "source_tables must not be empty")
+    onto = onto_mod.load_ontology()
+    known_tables = {o["table"] for o in onto.get("objects", [])}
+    unknown = [t for t in body.source_tables if t not in known_tables]
+    if unknown:
+        raise HTTPException(400, f"unknown table(s): {', '.join(unknown)}")
+    if body.sql.strip():
+        reason = agents.guard_sql(body.sql)
+        if reason is not None:
+            raise HTTPException(400, f"sql rejected: {reason}")
+
+    mid = "m_" + re.sub(r"[^a-z0-9_]+", "_", name.lower()).strip("_")
+    if any(m["id"] == mid for m in onto.get("metrics", [])):
+        raise HTTPException(400, f"metric {mid} already exists")
+
+    term = OntologyTerm(
+        id=mid, kind="metric", name=name, definition=body.definition,
+        sql=body.sql.strip(), source_tables=body.source_tables,
+        confidence=1.0, status="proposed",
+    )
+    onto.setdefault("metrics", []).append({
+        "id": mid, "name": name, "definition": body.definition, "sql": body.sql.strip(),
+        "source_tables": body.source_tables, "confidence": 1.0, "status": "proposed",
+    })
+    onto_mod.save_ontology(onto)
+
+    bus.publish("ontology_term_proposed", {"term": term.model_dump()})
+    bus.publish("approval_required", {"subject_kind": "ontology_term", "subject_id": mid})
+    return {"term_id": mid}
 
 
 @app.post("/api/data/upload")

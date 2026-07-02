@@ -311,3 +311,82 @@ def test_ontology_join_no_inferable_key_400():
 
     r = asyncio.run(run())
     assert r.status_code == 400
+
+
+# --- POST /api/ontology/metric --------------------------------------------
+
+def test_ontology_metric_happy_path_creates_proposed_metric():
+    original = ONTOLOGY_PATH.read_text()
+    try:
+        async def run():
+            async with _client() as c:
+                q = main.bus.subscribe()
+                r = await c.post("/api/ontology/metric", json={
+                    "name": "Repeat Buyer",
+                    "definition": "Customer with more than one order",
+                    "sql": "SELECT customer_id FROM orders GROUP BY customer_id HAVING count(*) > 1",
+                    "source_tables": ["orders"],
+                })
+                envs = [await asyncio.wait_for(q.get(), timeout=2) for _ in range(2)]
+                main.bus.unsubscribe(q)
+                return r, envs
+
+        r, envs = asyncio.run(run())
+        assert r.status_code == 200
+        term_id = r.json()["term_id"]
+        assert term_id == "m_repeat_buyer"
+
+        assert envs[0].type == "ontology_term_proposed"
+        assert envs[0].payload["term"]["id"] == term_id
+        assert envs[0].payload["term"]["status"] == "proposed"
+        assert envs[1].type == "approval_required"
+        assert envs[1].payload["subject_id"] == term_id
+
+        reloaded = load_ontology()
+        created = next(m for m in reloaded["metrics"] if m["id"] == term_id)
+        assert created["status"] == "proposed"
+
+        # derives edge in state points object -> metric (data-flow direction)
+        async def state():
+            async with _client() as c:
+                return await c.get("/api/state")
+        body = asyncio.run(state()).json()
+        derives = [e for e in body["graph"]["edges"] if e["target"] == term_id and e["kind"] == "derives"]
+        assert derives and derives[0]["source"] == "obj_order"
+    finally:
+        ONTOLOGY_PATH.write_text(original)
+
+
+def test_ontology_metric_unknown_table_400():
+    async def run():
+        async with _client() as c:
+            return await c.post("/api/ontology/metric", json={
+                "name": "Bad", "definition": "x", "source_tables": ["nope"],
+            })
+
+    r = asyncio.run(run())
+    assert r.status_code == 400
+
+
+def test_ontology_metric_write_sql_400():
+    async def run():
+        async with _client() as c:
+            return await c.post("/api/ontology/metric", json={
+                "name": "Evil", "definition": "x", "sql": "DROP TABLE orders",
+                "source_tables": ["orders"],
+            })
+
+    r = asyncio.run(run())
+    assert r.status_code == 400
+
+
+def test_ontology_metric_duplicate_400():
+    async def run():
+        async with _client() as c:
+            return await c.post("/api/ontology/metric", json={
+                "name": "Active Customer", "definition": "dup",
+                "source_tables": ["orders"],
+            })
+
+    r = asyncio.run(run())
+    assert r.status_code == 400
