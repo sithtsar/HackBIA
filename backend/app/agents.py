@@ -1,32 +1,43 @@
 """Strands/LLM agent flows for Foundry-Lite (Task 2).
 
-Path taken: **structured-JSON completions**, not tool-calling. The gemma probe
-(backend/app/probe_llm.py) confirmed gemma-4-31b on Cerebras does plain
-completions, `response_format=json_object`, AND strands tool-calling — all
-work. We still drive the pipeline in Python and use the LLM for exactly one
-structured-JSON step per flow, because the contract demands a precise,
-deterministic event sequence (lineage node/edge traversal, threshold rule,
-approval gating) that is far cleaner to emit from Python than to coax out of a
-tool-calling agent loop. Uses the raw `openai` client against the Cerebras
-base_url (simplest; params match plan.md's OpenAIModel config verbatim:
-model_id=FOUNDRY_MODEL_ID, max_tokens=FOUNDRY_MAX_OUTPUT_TOKENS, temperature=0.2).
+Path taken: **schema-locked structured completions via BAML**, not
+tool-calling. The gemma probe (backend/app/probe_llm.py) confirmed
+gemma-4-31b on Cerebras does plain completions, `response_format=json_object`,
+AND strands tool-calling — all work. We still drive the pipeline in Python and
+use the LLM for exactly one structured-completion step per flow, because the
+contract demands a precise, deterministic event sequence (lineage node/edge
+traversal, threshold rule, approval gating) that is far cleaner to emit from
+Python than to coax out of a tool-calling agent loop.
+
+The LLM calls themselves go through a generated `baml_client` (see
+baml_src/foundry.baml + baml_src/clients.baml): every completion is validated
+against a BAML/Pydantic class by BAML's Schema-Aligned Parsing (handles code
+fences, trailing commas, minor coercion) with the Cerebras client's
+`TwoRetries` policy retrying transient/parse failures — no unvalidated LLM
+dict ever reaches an event or ontology.yaml. Each flow calls exactly one thin
+module-level seam (`llm_draft_metrics` / `llm_ask` / `llm_draft_action`)
+wrapping the matching `b.*` call, so tests can monkeypatch that seam with a
+typed fake instead of hitting the network.
 
 Every flow is an async entrypoint (FastAPI background task). Blocking work
 (duckdb, LLM HTTP) runs in a worker thread via asyncio.to_thread so the event
 loop stays responsive for SSE; events publish on the loop via bus.publish. Any
-exception → error event + run_completed; the server never crashes.
+exception (including a BAML client/parse error after its retries are
+exhausted) → error event + run_completed; the server never crashes.
 """
 from __future__ import annotations
 
 import asyncio
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any
 
 import duckdb
 from dotenv import load_dotenv
+
+from baml_client.sync_client import b
+from baml_client.types import ActionDraftResponse, AskResponse, DraftMetricsResponse
 
 from . import ontology as onto_mod
 from .events import EventBus, OntologyTerm
@@ -36,43 +47,23 @@ load_dotenv()
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 DB_PATH = DATA_DIR / "foundry.duckdb"
 
-MODEL_ID = os.environ.get("FOUNDRY_MODEL_ID", "gemma-4-31b")
-MAX_TOKENS = int(os.environ.get("FOUNDRY_MAX_OUTPUT_TOKENS", "8192"))
-
 # ---------------------------------------------------------------------------
-# LLM (single structured-JSON completion; tests monkeypatch this function).
+# LLM seams — one thin function per flow, each a straight passthrough to a
+# generated BAML function. Tests monkeypatch these (not `b` itself) with
+# typed fakes returning the matching baml_client.types class.
 # ---------------------------------------------------------------------------
 
-_client = None
+
+def llm_draft_metrics(schema_and_samples: str, inferred_joins_json: str) -> DraftMetricsResponse:
+    return b.DraftOntologyMetrics(schema_and_samples, inferred_joins_json)
 
 
-def _openai():
-    global _client
-    if _client is None:
-        from openai import OpenAI
-
-        _client = OpenAI(
-            api_key=os.environ["CEREBRAS_API_KEY"],
-            base_url=os.environ["CEREBRAS_BASE_URL"],
-        )
-    return _client
+def llm_ask(question: str, approved_terms_json: str, schema_and_samples: str, retry_note: str) -> AskResponse:
+    return b.AskQuestion(question, approved_terms_json, schema_and_samples, retry_note)
 
 
-def llm_json(system: str, user: str, max_tokens: int | None = None) -> dict[str, Any]:
-    """One structured-JSON completion. Returns the parsed object."""
-    r = _openai().chat.completions.create(
-        model=MODEL_ID,
-        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-        max_tokens=max_tokens or MAX_TOKENS,
-        temperature=0.2,
-        response_format={"type": "json_object"},
-    )
-    content = r.choices[0].message.content or "{}"
-    content = content.strip()
-    if content.startswith("```"):  # strip stray code fences
-        content = content.strip("`")
-        content = content[content.find("{"):]
-    return json.loads(content)
+def llm_draft_action(insight_text: str) -> ActionDraftResponse:
+    return b.DraftActionTicket(insight_text)
 
 
 # ---------------------------------------------------------------------------
@@ -262,16 +253,8 @@ def _persist(objects: list[dict], joins: list[dict], metrics: list[dict]) -> Non
 # ===========================================================================
 # Flow 1: ontology draft
 # ===========================================================================
-
-_DRAFT_SYSTEM = (
-    "You are a BI ontology drafter. Given a DuckDB schema with sample rows and "
-    "inferred table joins, propose 3-5 useful business metrics. Return STRICT "
-    "JSON only: {\"metrics\":[{\"id\":\"m_snake_case\",\"name\":\"Human Name\","
-    "\"definition\":\"one sentence\",\"sql\":\"SELECT ... valid DuckDB SQL "
-    "referencing REAL columns only\",\"source_tables\":[\"table\"],"
-    "\"confidence\":0.0}]}. SQL must be a single SELECT. Metrics must reference "
-    "columns that exist in the schema. confidence in 0..1."
-)
+# Prompt lives in baml_src/foundry.baml (DraftOntologyMetrics); llm_draft_metrics
+# is the seam tests monkeypatch.
 
 
 async def run_ontology_draft(bus: EventBus, run_id: str) -> None:
@@ -329,24 +312,20 @@ async def run_ontology_draft(bus: EventBus, run_id: str) -> None:
 
         # Metrics: LLM proposes, Python validates each with EXPLAIN.
         bus.publish("status", {"message": "Drafting candidate metrics via LLM"}, run_id)
-        user = (
-            "Schema and sample rows:\n" + build_schema_prompt(schema)
-            + "\n\nInferred joins:\n" + json.dumps([
-                {"from": f"{f['from_table']}.{f['from_col']}", "to": f"{f['to_table']}.{f['to_col']}"} for f in fks
-            ])
-            + "\n\nPropose 3-5 metrics as JSON."
-        )
-        resp = await asyncio.to_thread(llm_json, _DRAFT_SYSTEM, user)
+        joins_json = json.dumps([
+            {"from": f"{f['from_table']}.{f['from_col']}", "to": f"{f['to_table']}.{f['to_col']}"} for f in fks
+        ])
+        resp = await asyncio.to_thread(llm_draft_metrics, build_schema_prompt(schema), joins_json)
 
         valid_tables = set(tables)
         metric_yaml: list[dict] = []
-        for m in resp.get("metrics", []):
-            mid = str(m.get("id", "")).strip() or f"m_{len(metric_yaml)}"
+        for m in resp.metrics:
+            mid = m.id.strip() or f"m_{len(metric_yaml)}"
             if not mid.startswith("m_"):
                 mid = "m_" + re.sub(r"[^a-z0-9_]", "_", mid.lower())
-            sql = str(m.get("sql", "")).strip()
-            conf = min(float(m.get("confidence", 0.7) or 0.7), 0.85)  # metrics: cap so UI never reads near-certain
-            src = [t for t in m.get("source_tables", []) if t in valid_tables] or tables[:1]
+            sql = m.sql.strip()
+            conf = min(m.confidence or 0.7, 0.85)  # metrics: cap so UI never reads near-certain
+            src = [t for t in m.source_tables if t in valid_tables] or tables[:1]
 
             if not sql:
                 bus.publish("status", {"message": f"Dropped metric {mid}: empty SQL"}, run_id)
@@ -357,8 +336,8 @@ async def run_ontology_draft(bus: EventBus, run_id: str) -> None:
                 bus.publish("status", {"message": f"Metric {mid} failed EXPLAIN ({err}); kept at low confidence for analyst review"}, run_id)
 
             term = OntologyTerm(
-                id=mid, kind="metric", name=str(m.get("name", mid)),
-                definition=str(m.get("definition", "")), sql=sql,
+                id=mid, kind="metric", name=m.name or mid,
+                definition=m.definition, sql=sql,
                 source_tables=src, confidence=round(conf, 2), status="proposed",
             )
             metric_yaml.append({
@@ -381,16 +360,8 @@ async def run_ontology_draft(bus: EventBus, run_id: str) -> None:
 # ===========================================================================
 # Flow 2: ask (NL question -> grounded SQL -> lineage -> result -> insight)
 # ===========================================================================
-
-_ASK_SYSTEM = (
-    "You are a BI query planner. Given a user question, a list of APPROVED "
-    "ontology terms (objects/joins/metrics with their SQL) and the DuckDB "
-    "schema, produce ONE DuckDB SELECT query that answers the question. Return "
-    "STRICT JSON only: {\"sql\":\"SELECT ...\",\"terms_used\":[\"term_id\",...],"
-    "\"reasoning_one_line\":\"...\"}. SQL must be a single read-only SELECT "
-    "(or WITH...SELECT), DuckDB dialect, referencing only real tables/columns. "
-    "terms_used lists the ids of the ontology terms you relied on."
-)
+# Prompt lives in baml_src/foundry.baml (AskQuestion); llm_ask is the seam
+# tests monkeypatch.
 
 
 def _table_to_object(onto: dict[str, Any]) -> dict[str, str]:
@@ -491,23 +462,20 @@ async def run_ask(bus: EventBus, run_id: str, question: str) -> None:
             {"id": t.id, "kind": t.kind, "name": t.name, "definition": t.definition, "sql": t.sql}
             for t in approved
         ])
-        base_user = (
-            f"Question: {question}\n\nApproved ontology terms:\n{terms_blob}\n\n"
-            f"Schema:\n{build_schema_prompt(schema, max_rows=5)}\n\nReturn JSON."
-        )
+        schema_prompt = build_schema_prompt(schema, max_rows=5)
 
         sql = ""
         terms_used: list[str] = []
         last_err = ""
         for attempt in range(2):
-            user = base_user if attempt == 0 else base_user + f"\n\nYour previous SQL failed to validate: {last_err}\nFix it."
+            retry_note = "" if attempt == 0 else f"\n\nYour previous SQL failed to validate: {last_err}\nFix it."
             try:
-                resp = await asyncio.to_thread(llm_json, _ASK_SYSTEM, user)
-            except Exception as e:  # noqa: BLE001 — malformed JSON counts as a failed attempt, not a crash
-                last_err = f"invalid JSON: {e}"
+                resp = await asyncio.to_thread(llm_ask, question, terms_blob, schema_prompt, retry_note)
+            except Exception as e:  # noqa: BLE001 — a malformed/invalid LLM response counts as a failed attempt, not a crash
+                last_err = f"invalid response: {e}"
                 continue
-            sql = str(resp.get("sql", "")).strip()
-            terms_used = [str(x) for x in resp.get("terms_used", [])]
+            sql = resp.sql.strip()
+            terms_used = list(resp.terms_used)
             reason = guard_sql(sql)
             if reason:
                 last_err = reason
@@ -556,22 +524,16 @@ async def run_ask(bus: EventBus, run_id: str, question: str) -> None:
 # ===========================================================================
 # Flow 3: action (insight -> Jira ticket proposal)
 # ===========================================================================
-
-_ACTION_SYSTEM = (
-    "You draft a Jira ticket from a BI insight. Return STRICT JSON only: "
-    "{\"title\":\"short imperative title\",\"body\":\"what happened, the "
-    "evidence numbers, and 'Suggested owner: BI Analyst on-call'\"}."
-)
+# Prompt lives in baml_src/foundry.baml (DraftActionTicket); llm_draft_action
+# is the seam tests monkeypatch.
 
 
 async def run_action(bus: EventBus, run_id: str, insight_text: str, insight_node_id: str) -> None:
     try:
         bus.publish("status", {"message": "Insight severity=critical → drafting escalation"}, run_id)
-        resp = await asyncio.to_thread(
-            llm_json, _ACTION_SYSTEM, f"Insight: {insight_text}\n\nReturn JSON.", 1024
-        )
-        title = str(resp.get("title", "Investigate support ticket spike")).strip()
-        body = str(resp.get("body", insight_text)).strip()
+        resp = await asyncio.to_thread(llm_draft_action, insight_text)
+        title = resp.title.strip()
+        body = resp.body.strip()
         if "BI Analyst on-call" not in body:
             body += "\n\nSuggested owner: BI Analyst on-call"
 

@@ -38,6 +38,8 @@ def _isolate(tmp_path, monkeypatch):
     main._insight_nodes.clear()
     main._action_nodes.clear()
     main._produces_edges.clear()
+    main._term_nodes.clear()
+    main._term_edges.clear()
 
     yield onto_path, baseline_path, events_path
 
@@ -58,6 +60,8 @@ def test_reset_rebuilds_seed_restores_baseline_clears_state_emits_event(_isolate
     main._insight_nodes["insight_x"] = {"id": "insight_x"}
     main._action_nodes["act_x"] = {"id": "act_x"}
     main._produces_edges["e_x"] = {"id": "e_x"}
+    main._term_nodes["m_x"] = {"id": "m_x"}
+    main._term_edges["e_derives_m_x_orders"] = {"id": "e_derives_m_x_orders"}
 
     async def run():
         async with _client() as c:
@@ -81,6 +85,8 @@ def test_reset_rebuilds_seed_restores_baseline_clears_state_emits_event(_isolate
     assert main._insight_nodes == {}
     assert main._action_nodes == {}
     assert main._produces_edges == {}
+    assert main._term_nodes == {}
+    assert main._term_edges == {}
 
     # exactly one status event on the bus, and it's the reset marker.
     assert env.type == "status"
@@ -93,6 +99,49 @@ def test_reset_rebuilds_seed_restores_baseline_clears_state_emits_event(_isolate
     # seed actually reran against the isolated data dir.
     assert (Path(seed_mod.DATA_DIR) / "customers.csv").exists()
     assert seed_mod.DB_PATH.exists()
+
+
+def test_replay_resets_state_before_reemitting(_isolate):
+    onto_path, baseline_path, events_path = _isolate
+
+    # Dirty everything a live session (or a previous replay) could have left
+    # behind, exactly like the demo/reset test does.
+    dirty_onto = onto_mod.load_ontology(onto_path)
+    dirty_onto["sources"].append({"table": "products"})
+    onto_mod.save_ontology(dirty_onto, onto_path)
+    main._actions["act_x"] = {"id": "act_x", "status": "proposed"}
+    main._pending["act_x"] = {"subject_kind": "action", "subject_id": "act_x"}
+    main._term_nodes["m_stale"] = {"id": "m_stale"}
+    main._term_edges["e_derives_m_stale_orders"] = {"id": "e_derives_m_stale_orders"}
+
+    async def run():
+        async with _client() as c:
+            q = main.bus.subscribe()
+            # reset defaults to true — no body override needed.
+            r = await c.post("/api/replay", json={"speed": 1000})
+            await asyncio.sleep(0.3)  # let the fast background replay finish
+            n = q.qsize()
+            main.bus.unsubscribe(q)
+            return r, n
+
+    r, n = asyncio.run(run())
+
+    assert r.status_code == 200
+    assert n == 40  # every demo_events.jsonl line still re-emitted after the reset
+
+    # ontology.yaml was restored to baseline BEFORE replay (no stray "products"
+    # source stacked on top, no id collisions from a prior run).
+    onto = onto_mod.load_ontology(onto_path)
+    assert [s["table"] for s in onto["sources"]] == ["customers", "orders", "tickets"]
+
+    # stale pre-replay demo state is gone; only what replay itself produced remains
+    # (the demo narrative's own action + its 3 not-yet-persisted proposed metrics).
+    assert "act_x" not in main._actions
+    assert "act_x" not in main._pending
+    assert "m_stale" not in main._term_nodes
+    assert "e_derives_m_stale_orders" not in main._term_edges
+    assert len(main._actions) == 1
+    assert set(main._term_nodes) == {"m_active_customer", "m_avg_order_value", "m_ticket_sla_breach_rate"}
 
 
 def test_ontology_export_returns_yaml_file(_isolate):

@@ -1,0 +1,99 @@
+// Foundry-Lite's three LLM call sites (backend/app/agents.py). Prompts are
+// ported verbatim from the raw-JSON versions that used to live in agents.py's
+// _DRAFT_SYSTEM/_ASK_SYSTEM/_ACTION_SYSTEM strings; the old "Return STRICT
+// JSON only: {...}" shape spec is now expressed as class fields (with
+// @description carrying the old inline hints) and rendered by
+// {{ ctx.output_format }} instead of hand-written JSON-shape prose.
+// docs/contracts.md is the source of truth for the shapes these feed into
+// (OntologyTerm, ActionProposal) — agents.py fills in the fields the LLM
+// doesn't produce (kind, status, ids) exactly as before; only the "get one
+// validated structured completion" mechanism changed.
+
+// --- Flow 1: ontology draft (metrics) ---------------------------------
+
+class DraftMetric {
+  id string @description("snake_case id prefixed with m_, e.g. m_active_customer")
+  name string @description("Human Name")
+  definition string @description("one sentence")
+  sql string @description("SELECT ... valid DuckDB SQL referencing REAL columns only; must be a single SELECT")
+  source_tables string[] @description("table names this metric is computed from")
+  confidence float @description("0..1")
+}
+
+class DraftMetricsResponse {
+  metrics DraftMetric[] @description("3-5 useful business metrics")
+}
+
+function DraftOntologyMetrics(schema_and_samples: string, inferred_joins_json: string) -> DraftMetricsResponse {
+  client Cerebras
+  prompt #"
+    {{ _.role("system") }}
+    You are a BI ontology drafter. Given a DuckDB schema with sample rows and
+    inferred table joins, propose 3-5 useful business metrics. Metrics must
+    reference columns that exist in the schema.
+
+    {{ _.role("user") }}
+    Schema and sample rows:
+    {{ schema_and_samples }}
+
+    Inferred joins:
+    {{ inferred_joins_json }}
+
+    Propose 3-5 metrics as JSON.
+
+    {{ ctx.output_format }}
+  "#
+}
+
+// --- Flow 2: ask (NL question -> grounded SQL) -------------------------
+
+class AskResponse {
+  sql string @description("SELECT ... a single read-only SELECT (or WITH...SELECT), DuckDB dialect, referencing only real tables/columns")
+  terms_used string[] @description("ids of the ontology terms you relied on")
+  reasoning_one_line string
+}
+
+function AskQuestion(question: string, approved_terms_json: string, schema_and_samples: string, retry_note: string) -> AskResponse {
+  client Cerebras
+  prompt #"
+    {{ _.role("system") }}
+    You are a BI query planner. Given a user question, a list of APPROVED
+    ontology terms (objects/joins/metrics with their SQL) and the DuckDB
+    schema, produce ONE DuckDB SELECT query that answers the question. SQL
+    must be a single read-only SELECT (or WITH...SELECT), DuckDB dialect,
+    referencing only real tables/columns. terms_used lists the ids of the
+    ontology terms you relied on.
+
+    {{ _.role("user") }}
+    Question: {{ question }}
+
+    Approved ontology terms:
+    {{ approved_terms_json }}
+
+    Schema:
+    {{ schema_and_samples }}
+    {{ retry_note }}
+
+    {{ ctx.output_format }}
+  "#
+}
+
+// --- Flow 3: action (insight -> Jira ticket proposal) ------------------
+
+class ActionDraftResponse {
+  title string @description("short imperative title")
+  body string @description("what happened, the evidence numbers, and 'Suggested owner: BI Analyst on-call'")
+}
+
+function DraftActionTicket(insight_text: string) -> ActionDraftResponse {
+  client Cerebras
+  prompt #"
+    {{ _.role("system") }}
+    You draft a Jira ticket from a BI insight.
+
+    {{ _.role("user") }}
+    Insight: {{ insight_text }}
+
+    {{ ctx.output_format }}
+  "#
+}

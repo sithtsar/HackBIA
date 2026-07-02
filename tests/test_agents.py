@@ -1,11 +1,14 @@
 """Task 2 agent tests. LLM network calls are excluded from the default run
-(marked @pytest.mark.llm); everything here mocks the completion function."""
+(marked @pytest.mark.llm); everything here mocks the llm_draft_metrics/
+llm_ask/llm_draft_action seams (thin wrappers around the generated BAML
+`b.*` functions — see backend/app/agents.py's module docstring)."""
 import asyncio
 
 import pytest
 
 from backend.app import agents, seed
 from backend.app.events import EventBus
+from baml_client.types import ActionDraftResponse, AskResponse, DraftMetric, DraftMetricsResponse
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -105,14 +108,14 @@ def _collect_run(coro_factory):
 def test_run_ask_event_sequence_mocked_llm(monkeypatch):
     # Canned planner output: a valid, guard-passing, EXPLAIN-able query against
     # an approved object term. Customers question -> no ticket insight.
-    def fake_llm_json(system, user, max_tokens=None):
-        return {
-            "sql": "SELECT count(*) AS n FROM customers",
-            "terms_used": ["obj_customer"],
-            "reasoning_one_line": "count all customers",
-        }
+    def fake_llm_ask(question, approved_terms_json, schema_and_samples, retry_note):
+        return AskResponse(
+            sql="SELECT count(*) AS n FROM customers",
+            terms_used=["obj_customer"],
+            reasoning_one_line="count all customers",
+        )
 
-    monkeypatch.setattr(agents, "llm_json", fake_llm_json)
+    monkeypatch.setattr(agents, "llm_ask", fake_llm_ask)
 
     types = _collect_run(lambda bus: agents.run_ask(bus, "run_test", "How many customers do we have?"))
 
@@ -128,16 +131,18 @@ def test_run_ask_event_sequence_mocked_llm(monkeypatch):
 
 
 def test_run_ask_ticket_question_fires_insight_and_action(monkeypatch):
-    def fake_llm_json(system, user, max_tokens=None):
-        if "Jira" in system:  # action drafter
-            return {"title": "Investigate ticket spike", "body": "evidence numbers here"}
-        return {
-            "sql": "SELECT count(*) AS n FROM tickets",
-            "terms_used": ["obj_ticket"],
-            "reasoning_one_line": "count tickets",
-        }
+    def fake_llm_ask(question, approved_terms_json, schema_and_samples, retry_note):
+        return AskResponse(
+            sql="SELECT count(*) AS n FROM tickets",
+            terms_used=["obj_ticket"],
+            reasoning_one_line="count tickets",
+        )
 
-    monkeypatch.setattr(agents, "llm_json", fake_llm_json)
+    def fake_llm_draft_action(insight_text):
+        return ActionDraftResponse(title="Investigate ticket spike", body="evidence numbers here")
+
+    monkeypatch.setattr(agents, "llm_ask", fake_llm_ask)
+    monkeypatch.setattr(agents, "llm_draft_action", fake_llm_draft_action)
 
     types = _collect_run(
         lambda bus: agents.run_ask(bus, "run_tix", "What is happening with support tickets lately?")
@@ -148,6 +153,44 @@ def test_run_ask_ticket_question_fires_insight_and_action(monkeypatch):
     # insight precedes the action it produces, both precede run_completed
     assert types.index("insight") < types.index("action_proposed")
     assert types.index("action_proposed") < types.index("run_completed")
+
+
+def test_run_ask_retries_after_first_llm_failure(monkeypatch):
+    # First call simulates a BAML failure that survived BAML's own internal
+    # retries (parse/validation exhaustion) — the *outer* ask-loop (agents.py,
+    # independent of BAML's client-level retry_policy) must still treat this
+    # as one failed attempt and retry with the error appended, not crash.
+    retry_notes: list[str] = []
+
+    def fake_llm_ask(question, approved_terms_json, schema_and_samples, retry_note):
+        retry_notes.append(retry_note)
+        if len(retry_notes) == 1:
+            raise ValueError("BAML: failed to parse into AskResponse")
+        return AskResponse(sql="SELECT count(*) AS n FROM customers", terms_used=["obj_customer"], reasoning_one_line="ok")
+
+    monkeypatch.setattr(agents, "llm_ask", fake_llm_ask)
+
+    types = _collect_run(lambda bus: agents.run_ask(bus, "run_retry", "How many customers do we have?"))
+
+    assert len(retry_notes) == 2
+    assert retry_notes[0] == ""  # first attempt: no retry context yet
+    assert "failed to validate" in retry_notes[1]  # second attempt carries the failure
+    assert "error" not in types  # recovered on the second attempt
+    assert types[-1] == "run_completed"
+    assert "sql_generated" in types
+
+
+def test_run_ask_exhausts_both_attempts_emits_error(monkeypatch):
+    def fake_llm_ask(question, approved_terms_json, schema_and_samples, retry_note):
+        raise ValueError("BAML: failed to parse into AskResponse")
+
+    monkeypatch.setattr(agents, "llm_ask", fake_llm_ask)
+
+    types = _collect_run(lambda bus: agents.run_ask(bus, "run_fail", "How many customers do we have?"))
+
+    assert "error" in types
+    assert types[-1] == "run_completed"
+    assert "sql_generated" not in types
 
 
 def test_run_ontology_draft_mocked_llm(monkeypatch, tmp_path):
@@ -164,17 +207,17 @@ def test_run_ontology_draft_mocked_llm(monkeypatch, tmp_path):
     baseline_metrics = {m["id"]: dict(m) for m in baseline["metrics"]}
     baseline_joins = {j["id"]: dict(j) for j in baseline["joins"]}
 
-    def fake_llm_json(system, user, max_tokens=None):
-        return {"metrics": [
-            {"id": "m_full_conf", "name": "Full Confidence Metric", "definition": "silly but valid",
-             "sql": "SELECT count(*) AS n FROM customers", "source_tables": ["customers"],
-             "confidence": 1.0},  # self-reported max confidence -> must be capped
-            {"id": "m_bad_sql", "name": "Bad SQL Metric", "definition": "deliberately broken",
-             "sql": "SELECT * FROM not_a_real_table", "source_tables": ["customers"],
-             "confidence": 0.7},  # fails EXPLAIN -> forced to low confidence
-        ]}
+    def fake_llm_draft_metrics(schema_and_samples, inferred_joins_json):
+        return DraftMetricsResponse(metrics=[
+            DraftMetric(id="m_full_conf", name="Full Confidence Metric", definition="silly but valid",
+                        sql="SELECT count(*) AS n FROM customers", source_tables=["customers"],
+                        confidence=1.0),  # self-reported max confidence -> must be capped
+            DraftMetric(id="m_bad_sql", name="Bad SQL Metric", definition="deliberately broken",
+                        sql="SELECT * FROM not_a_real_table", source_tables=["customers"],
+                        confidence=0.7),  # fails EXPLAIN -> forced to low confidence
+        ])
 
-    monkeypatch.setattr(agents, "llm_json", fake_llm_json)
+    monkeypatch.setattr(agents, "llm_draft_metrics", fake_llm_draft_metrics)
 
     bus = EventBus()
     envs: list = []
@@ -223,9 +266,41 @@ def test_run_ontology_draft_mocked_llm(monkeypatch, tmp_path):
         assert next(j for j in reloaded["joins"] if j["id"] == jid) == orig
 
 
+def test_run_ontology_draft_llm_failure_emits_error_not_crash(monkeypatch, tmp_path):
+    # A BAML failure surviving its own client-level retries (parse/validation
+    # exhaustion, rate limit, etc.) must land in the flow's existing
+    # try/except -> error + run_completed, exactly like any other exception.
+    tmp_yaml = tmp_path / "ontology.yaml"
+    tmp_yaml.write_text(agents.onto_mod.ONTOLOGY_PATH.read_text())
+    real_load, real_save = agents.onto_mod.load_ontology, agents.onto_mod.save_ontology
+    monkeypatch.setattr(agents.onto_mod, "load_ontology", lambda path=tmp_yaml: real_load(path))
+    monkeypatch.setattr(agents.onto_mod, "save_ontology", lambda onto, path=tmp_yaml: real_save(onto, path))
+
+    def fake_llm_draft_metrics(schema_and_samples, inferred_joins_json):
+        raise ValueError("BAML: failed to parse into DraftMetricsResponse")
+
+    monkeypatch.setattr(agents, "llm_draft_metrics", fake_llm_draft_metrics)
+
+    bus = EventBus()
+    envs: list = []
+    bus.add_listener(lambda env: envs.append(env))
+
+    async def go():
+        bus.bind_loop(asyncio.get_running_loop())
+        await agents.run_ontology_draft(bus, "run_draft_fail")
+
+    asyncio.run(go())
+
+    types = [e.type for e in envs]
+    assert "error" in types
+    assert types[-1] == "run_completed"
+    assert not any(e.type == "ontology_term_proposed" and e.payload["term"]["kind"] == "metric" for e in envs)
+
+
 # --- Live LLM smoke (excluded by default) -----------------------------------
 
 @pytest.mark.llm
-def test_llm_json_live():
-    out = agents.llm_json("Return JSON only.", 'Return {"ok": true}.')
-    assert out.get("ok") is True
+def test_llm_draft_action_live():
+    out = agents.llm_draft_action("Insight: support tickets spiked 3x in the last 14 days.")
+    assert out.title
+    assert out.body

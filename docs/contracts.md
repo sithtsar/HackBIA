@@ -109,7 +109,10 @@ metrics:
 
 Graph derivation (backend builds, UI never derives):
 nodes = sources + objects + metrics (+ insights/actions appended by events);
-edges = table→object (`feeds`), joins between objects (`join`), metric→its objects (`derives`), insight→action (`produces`).
+edges = table→object (`feeds`), joins between objects (`join`), metric→its objects (`derives`), insight→action (`produces`), insight-evidence node→insight (`produces`).
+A `proposed` term appears WITH its edges the moment `ontology_term_proposed` fires (metric → `derives`, join → `join`) — no floating nodes awaiting approval. These event-driven edges are appended server-side in `_on_event` AND mirrored in the client reducer with identical ids/guards (existence + dedupe), so live view and refetch always agree.
+
+LLM output contract (backend): every LLM call goes through **BAML** (`baml-py`) — functions and output classes defined in `baml_src/*.baml`, generated client committed at `baml_client/`. Cerebras is wired as an `openai-generic` client (`base_url https://api.cerebras.ai/v1`, key ONLY from env `CEREBRAS_API_KEY`, retry_policy max 2 retries with exponential backoff). BAML's Schema-Aligned Parsing is the fault-tolerance layer (markdown fences, trailing commas, type coercion); output class shapes match the Core objects above exactly. Parse/validation exhaustion emits an `error` event and ends the run. No unvalidated LLM dict ever reaches the event bus or ontology.yaml. Regenerate after editing `.baml` files: `uv run baml-cli generate`.
 
 ## HTTP API (all under /api)
 
@@ -120,7 +123,8 @@ edges = table→object (`feeds`), joins between objects (`join`), metric→its o
 | `POST /api/ontology/draft` | `{}` | `{ run_id }` (agent runs async, events stream) |
 | `POST /api/ask` | `{ question: string }` | `{ run_id }` |
 | `POST /api/approvals/{subject_id}` | `{ decision: "approved"\|"rejected" }` | `{ ok: true }` (emits approval_resolved; approved action → push → action_pushed) |
-| `POST /api/replay` | `{ file?: string, speed?: number }` | `{ ok: true }` (default file `backend/data/demo_events.jsonl`, speed 4 = 4x; re-emits envelopes onto the live bus with fresh ts) |
+| `POST /api/replay` | `{ file?: string, speed?: number, reset?: boolean }` | `{ ok: true }` (default file `backend/data/demo_events.jsonl`, speed 4 = 4x; re-emits envelopes onto the live bus with fresh ts. `reset` defaults **true**: server restores baseline ontology + clears runtime graph/actions/pending first, so replay never stacks on stale state) |
+| `POST /api/ontology/join` | `{ "from_object": string, "to_object": string }` | `{ term_id: string }` (user-drawn join: runs deterministic FK inference between the two objects' tables, creates a `proposed` join term, emits `ontology_term_proposed` + `approval_required`; 400 unknown object id, same id, or no inferable key) |
 | `POST /api/data/upload` | multipart: `file` (CSV, required), `table` (optional name; default = sanitized filename stem) | `{ table: string, rows: number, columns: {name: string, type: string}[] }` (loads into `foundry.duckdb`, appends `{table}` to ontology.yaml `sources:` if absent, emits a `status` event; 400 bad name/CSV, 413 over 20MB) |
 | `POST /api/demo/reset` | — | `{ ok: true }` (reseeds `foundry.duckdb`+CSVs, restores `ontology.yaml` from the committed baseline, clears in-memory actions/pending/insight state, truncates `events.jsonl`, emits one `status` event) |
 | `GET /api/ontology/export` | — | `ontology.yaml` file download, `Content-Type: application/x-yaml`, filename `ontology.yaml` |
