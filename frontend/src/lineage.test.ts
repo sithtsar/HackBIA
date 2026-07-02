@@ -18,6 +18,11 @@ const edges: GraphEdge[] = [
   { id: "e_feeds_orders", source: "orders", target: "obj_order", kind: "feeds" },
   { id: "e_join", source: "obj_order", target: "obj_customer", kind: "join" },
   { id: "e_derives", source: "m_active", target: "obj_order", kind: "derives" },
+  // Insight evidence edges (backend/main.py _on_event + reducer.ts insight
+  // case): node_ids from the insight payload -> produces edges into the
+  // insight node, same id scheme as the produces edge below.
+  { id: "e_obj_customer_insight_1", source: "obj_customer", target: "insight_1", kind: "produces" },
+  { id: "e_obj_order_insight_1", source: "obj_order", target: "insight_1", kind: "produces" },
   { id: "e_produces", source: "insight_1", target: "act_1", kind: "produces" },
 ];
 const graph = { nodes, edges };
@@ -44,9 +49,15 @@ describe("upstream", () => {
     expect(edgeIds.size).toBe(0);
   });
 
-  test("action walks produces edge back to its insight", () => {
+  test("action walks produces edges back through its insight to evidence objects and their source tables", () => {
     const { nodeIds, edgeIds } = upstream(graph, "act_1");
-    expect([...nodeIds].sort()).toEqual(["act_1", "insight_1"]);
+    expect([...nodeIds].sort()).toEqual(
+      ["act_1", "customers", "insight_1", "obj_customer", "obj_order", "orders"].sort(),
+    );
     expect(edgeIds.has("e_produces")).toBe(true);
+    expect(edgeIds.has("e_obj_customer_insight_1")).toBe(true);
+    expect(edgeIds.has("e_obj_order_insight_1")).toBe(true);
+    expect(edgeIds.has("e_feeds_customers")).toBe(true);
+    expect(edgeIds.has("e_feeds_orders")).toBe(true);
   });
 });

@@ -118,6 +118,33 @@ def test_approvals_on_action_updates_registry_and_clears_pending():
     assert "act_test01" not in main._pending
 
 
+def test_insight_event_creates_produces_edges_from_evidence_to_insight():
+    async def run():
+        async with _client() as c:
+            payload = {
+                "text": "spike", "severity": "critical",
+                "node_ids": ["obj_ticket", "obj_customer", "no_such_node"],
+            }
+            main.bus.publish("insight", payload, "run_test01")
+            main.bus.publish("insight", payload, "run_test01")  # replay/live can re-emit the same insight
+            return await c.get("/api/state")
+
+    r = asyncio.run(run())
+    assert r.status_code == 200
+    edges = r.json()["graph"]["edges"]
+    produces = [e for e in edges if e["kind"] == "produces"]
+    assert {
+        "id": "e_obj_ticket_insight_run_test01", "source": "obj_ticket",
+        "target": "insight_run_test01", "kind": "produces",
+    } in produces
+    assert {
+        "id": "e_obj_customer_insight_run_test01", "source": "obj_customer",
+        "target": "insight_run_test01", "kind": "produces",
+    } in produces
+    assert not any(e["source"] == "no_such_node" for e in edges)  # skip ids with no matching node
+    assert len(produces) == 2  # duplicate insight event doesn't duplicate edges
+
+
 def test_replay_route_returns_immediately_and_streams_events():
     async def run():
         async with _client() as c:

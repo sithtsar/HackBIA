@@ -40,7 +40,7 @@ Then the chip `What's happening with support tickets in the last two weeks?`
 Result fires the critical insight (≈3.5x ticket spike, SLA breach rate 4x) — insight node appears red.
 
 **Act 3 — insight becomes action, human approves (~50s).**
-The agent drafts a Jira ticket from the insight — action node amber, approval card appears. **Click the action node**: the detail panel opens with the drafted ticket and the full upstream lineage re-illuminates — tickets.csv → Support Ticket → breach metric → insight → this action. *"Every number in this ticket is traceable to a CSV row on this board."* Read the ticket aloud, click **Approve** → `action_pushed` → green. *"Closed loop: raw CSV to approved Jira ticket, every hop visible, human at both gates."*
+The agent drafts a Jira ticket from the insight — action node amber, approval card appears. **Click the action node**: the detail panel opens with the drafted ticket and the upstream lineage re-illuminates — tickets.csv → Support Ticket → insight → this action. *"Every number in this ticket is traceable to a CSV row on this board."* Read the ticket aloud, click **Approve** → `action_pushed` → green. *"Closed loop: raw CSV to approved Jira ticket, every hop visible, human at both gates."*
 Timer freezes: **AGENT ~2:40 vs MANUAL 45:00.**
 
 ## Insurance

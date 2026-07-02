@@ -501,7 +501,11 @@ async def run_ask(bus: EventBus, run_id: str, question: str) -> None:
         last_err = ""
         for attempt in range(2):
             user = base_user if attempt == 0 else base_user + f"\n\nYour previous SQL failed to validate: {last_err}\nFix it."
-            resp = await asyncio.to_thread(llm_json, _ASK_SYSTEM, user)
+            try:
+                resp = await asyncio.to_thread(llm_json, _ASK_SYSTEM, user)
+            except Exception as e:  # noqa: BLE001 — malformed JSON counts as a failed attempt, not a crash
+                last_err = f"invalid JSON: {e}"
+                continue
             sql = str(resp.get("sql", "")).strip()
             terms_used = [str(x) for x in resp.get("terms_used", [])]
             reason = guard_sql(sql)

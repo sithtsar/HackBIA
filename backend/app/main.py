@@ -49,6 +49,17 @@ def _on_event(env: Envelope) -> None:
             "id": node_id, "kind": "insight", "label": env.payload["text"],
             "status": "neutral", "meta": {"severity": env.payload["severity"]},
         }
+        extra = list(_insight_nodes.values()) + list(_action_nodes.values())
+        graph_node_ids = {n["id"] for n in onto_mod.build_graph(onto_mod.load_ontology(), extra_nodes=extra)["nodes"]}
+        for evidence_id in env.payload["node_ids"]:
+            if evidence_id not in graph_node_ids:
+                continue  # skip ids with no matching node
+            edge_id = f"e_{evidence_id}_{node_id}"
+            if edge_id in _produces_edges:
+                continue  # dedupe: replay + live can re-emit the same insight
+            _produces_edges[edge_id] = {
+                "id": edge_id, "source": evidence_id, "target": node_id, "kind": "produces",
+            }
     elif env.type == "action_proposed":
         a = env.payload["action"]
         _actions[a["id"]] = a

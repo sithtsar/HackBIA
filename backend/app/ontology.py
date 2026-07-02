@@ -18,7 +18,7 @@ from typing import Any
 
 import yaml
 
-from .events import ActionProposal, OntologyTerm
+from .events import OntologyTerm
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 ONTOLOGY_PATH = DATA_DIR / "ontology.yaml"

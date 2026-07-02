@@ -65,19 +65,23 @@ export function reduceBoard(board: BoardState, envelope: EventEnvelope): BoardSt
     }
 
     case "insight": {
-      const { text, severity } = envelope.payload;
+      const { text, severity, node_ids } = envelope.payload;
       // Matches backend/app/main.py's _on_event insight node id scheme
       // (run_id-keyed, falls back to event id) so a later GET /api/state
       // refetch upserts the same node instead of duplicating it.
       const id = `insight_${envelope.run_id || envelope.id}`;
       const node: GraphNode = { id, kind: "insight", label: text, status: "neutral", meta: { severity } };
       const nodes = upsertBy(board.graph.nodes, node);
-      // No node_ids -> insight edges here: contracts.md says the backend
-      // builds produces edges and the UI never derives its own, and
-      // GET /api/state only ever serves insight -> action produces edges
-      // (see the action_proposed case below). Adding one here would get
-      // silently dropped on the next refetch and jump the dagre layout.
-      return { ...board, graph: { ...board.graph, nodes } };
+      const knownIds = new Set(nodes.map((n) => n.id));
+      // Mirrors backend's e_<evidence_id>_<insight_id> produces edges so
+      // live and refetched state agree (same id scheme, same guards).
+      const edges = node_ids.reduce<GraphEdge[]>((acc, evidenceId) => {
+        if (!knownIds.has(evidenceId)) return acc; // skip ids with no matching node
+        const edgeId = `e_${evidenceId}_${id}`;
+        if (acc.some((e) => e.id === edgeId)) return acc; // dedupe: replay + live can re-emit
+        return [...acc, { id: edgeId, source: evidenceId, target: id, kind: "produces" }];
+      }, board.graph.edges);
+      return { ...board, graph: { nodes, edges } };
     }
 
     case "action_proposed": {
