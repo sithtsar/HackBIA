@@ -103,11 +103,18 @@ def test_approvals_on_action_updates_registry_and_clears_pending():
             }})
             main.bus.publish("approval_required", {"subject_kind": "action", "subject_id": "act_test01"})
             assert "act_test01" in main._pending
-            return await c.post("/api/approvals/act_test01", json={"decision": "approved"})
+            q = main.bus.subscribe()
+            r = await c.post("/api/approvals/act_test01", json={"decision": "approved"})
+            # Task 3: approval triggers a background push (mock mode here) —
+            # wait for approval_resolved + action_pushed before asserting.
+            for _ in range(2):
+                await asyncio.wait_for(q.get(), timeout=2)
+            main.bus.unsubscribe(q)
+            return r
 
     r = asyncio.run(run())
     assert r.status_code == 200
-    assert main._actions["act_test01"]["status"] == "approved"
+    assert main._actions["act_test01"]["status"] == "pushed"
     assert "act_test01" not in main._pending
 
 

@@ -21,7 +21,8 @@ from sse_starlette.sse import EventSourceResponse
 
 from . import agents
 from . import ontology as onto_mod
-from .events import DEMO_EVENTS_FILE, Envelope, EventBus, replay as replay_events
+from .actions import ActionPushError, push_action
+from .events import DEMO_EVENTS_FILE, ActionProposal, Envelope, EventBus, replay as replay_events
 
 load_dotenv()
 
@@ -152,10 +153,29 @@ async def approve(subject_id: str, body: ApprovalBody) -> dict[str, bool]:
         onto = onto_mod.load_ontology()
         if onto_mod.set_term_status(onto, subject_id, decision):
             onto_mod.save_ontology(onto)
-    # Action push (Jira/Slack) is Task 3 — approving an action here only
-    # emits approval_resolved, per plan.md.
     bus.publish("approval_resolved", {"subject_kind": subject_kind, "subject_id": subject_id, "decision": decision})
+    if subject_kind == "action" and decision == "approved":
+        raw = _actions.get(subject_id)
+        if raw is None:
+            bus.publish("error", {"message": f"cannot push unknown action {subject_id}"})
+        else:
+            asyncio.create_task(_push_and_emit(ActionProposal(**raw)))
     return {"ok": True}
+
+
+async def _push_and_emit(action: ActionProposal) -> None:
+    """Background push of an approved action. Success → action_pushed (the
+    bus listener marks the registry status=pushed); any failure → error
+    event. Never crashes, never silent."""
+    try:
+        url = await push_action(action)
+    except ActionPushError as exc:
+        bus.publish("error", {"message": str(exc)})
+        return
+    except Exception as exc:  # e.g. httpx timeout/connect error
+        bus.publish("error", {"message": f"action push failed: {type(exc).__name__}: {exc}"})
+        return
+    bus.publish("action_pushed", {"action_id": action.id, "external_url": url})
 
 
 @app.post("/api/replay")
