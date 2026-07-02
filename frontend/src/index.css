@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
+@theme {
+  --color-canvas: #0e1116;
+  --color-panel: #161b22;
+  --color-hairline: #2b3444;
+  --color-agent-blue: #4c90f0;
+  --color-pending-amber: #d9822b;
+  --color-committed-green: #3dcc91;
+  --color-text-secondary: #9ba6b5;
+  --color-text-primary: #e6edf3;
+
+  --radius-DEFAULT: 4px;
+
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* React Flow dark theme: panel-colored controls, no ambient motion. */
+.foundry-controls.react-flow__controls {
+  box-shadow: none;
+  border: 1px solid var(--color-hairline);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.foundry-controls .react-flow__controls-button {
+  background: var(--color-panel);
+  border-bottom: 1px solid var(--color-hairline);
+  fill: var(--color-text-secondary);
+  stroke: var(--color-text-secondary);
+}
+
+.foundry-controls .react-flow__controls-button:hover {
+  background: var(--color-hairline);
+}
+
+.react-flow__attribution {
+  display: none;
+}
