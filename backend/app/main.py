@@ -148,6 +148,14 @@ async def approve(subject_id: str, body: ApprovalBody) -> dict[str, bool]:
     decision = body.decision
     if subject_id.startswith("act_"):
         subject_kind = "action"
+        # ponytail: idempotency guard — a repeat "approved" while already
+        # approved/pushed (double-click, client retry) or repeat "rejected"
+        # while already rejected is a no-op: no re-emit, no re-push.
+        current = _actions.get(subject_id, {}).get("status")
+        if (decision == "approved" and current in ("approved", "pushed")) or (
+            decision == "rejected" and current == "rejected"
+        ):
+            return {"ok": True}
     else:
         subject_kind = "ontology_term"
         onto = onto_mod.load_ontology()

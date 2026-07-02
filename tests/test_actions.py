@@ -1,6 +1,7 @@
 """Task 3: action push adapters. No network — httpx is monkeypatched."""
 import asyncio
 import base64
+import logging
 
 import httpx
 import pytest
@@ -52,9 +53,11 @@ def _mock_transport(monkeypatch, handler):
 
 # --- mock mode -------------------------------------------------------------
 
-def test_mock_mode_returns_deterministic_fake_urls():
-    assert asyncio.run(push_action(_action(kind="jira"))) == "https://mock.jira.local/browse/FDRY-0001"
-    assert asyncio.run(push_action(_action(id="act_0042", kind="slack"))) == "https://mock.slack.local/msg/0042"
+def test_mock_mode_returns_deterministic_fake_urls(caplog):
+    with caplog.at_level(logging.WARNING, logger="foundry.actions"):
+        assert asyncio.run(push_action(_action(kind="jira"))) == "https://mock.jira.local/browse/FDRY-0001"
+        assert asyncio.run(push_action(_action(id="act_0042", kind="slack"))) == "https://mock.slack.local/msg/0042"
+    assert sum("MOCK MODE" in r.message for r in caplog.records) == 2
 
 
 # --- jira payload / auth ----------------------------------------------------
@@ -141,6 +144,31 @@ def test_approve_action_emits_resolved_then_pushed_and_marks_registry():
     assert pushed.payload == {"action_id": "act_0001", "external_url": "https://mock.jira.local/browse/FDRY-0001"}
     assert main._actions["act_0001"]["status"] == "pushed"
     assert "act_0001" not in main._pending
+
+
+def test_duplicate_approval_is_idempotent():
+    """A second POST of decision=approved for an already-approved/pushed
+    action must not re-emit or re-push (double-click / client retry)."""
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://test") as c:
+            _propose("act_0002")
+            q = main.bus.subscribe()
+            r1 = await c.post("/api/approvals/act_0002", json={"decision": "approved"})
+            resolved, pushed = [await asyncio.wait_for(q.get(), timeout=2) for _ in range(2)]
+            r2 = await c.post("/api/approvals/act_0002", json={"decision": "approved"})
+            await asyncio.sleep(0)  # let any (unwanted) background task run
+            still_empty = q.empty()
+            main.bus.unsubscribe(q)
+            return r1, r2, resolved, pushed, still_empty
+
+    r1, r2, resolved, pushed, still_empty = asyncio.run(run())
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert r2.json() == {"ok": True}
+    assert resolved.type == "approval_resolved"
+    assert pushed.type == "action_pushed"  # exactly one action_pushed: no third event followed
+    assert still_empty
+    assert main._actions["act_0002"]["status"] == "pushed"
 
 
 def test_push_error_emits_error_event_not_crash(monkeypatch):
