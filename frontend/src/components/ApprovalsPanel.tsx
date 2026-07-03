@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ActionProposal, OntologyTerm, PendingItem } from "../types";
 import { postApproval, type ApprovalDecision } from "../api";
+import { useStore } from "../store";
 import { PanelHeader } from "./PanelHeader";
 
 type ApprovalsPanelProps = {
@@ -41,6 +42,7 @@ function toRow(item: PendingItem, terms: OntologyTerm[], actions: ActionProposal
 }
 
 export function ApprovalsPanel({ pending, terms, actions }: ApprovalsPanelProps) {
+  const { approveAll, approvingAll } = useStore();
   const [inFlight, setInFlight] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,7 +64,22 @@ export function ApprovalsPanel({ pending, terms, actions }: ApprovalsPanelProps)
 
   return (
     <section className="flex min-h-0 flex-col">
-      <PanelHeader>Approvals</PanelHeader>
+      <PanelHeader
+        action={
+          pending.length > 0 ? (
+            <button
+              type="button"
+              disabled={approvingAll}
+              onClick={() => void approveAll()}
+              className="rounded border border-committed-green px-2 py-0.5 font-mono text-[10px] font-normal uppercase tracking-wider text-committed-green disabled:opacity-50"
+            >
+              {approvingAll ? "Approving…" : `Approve all (${pending.length})`}
+            </button>
+          ) : undefined
+        }
+      >
+        Approvals
+      </PanelHeader>
       <div className="flex-1 overflow-y-auto">
         {rows.length === 0 ? (
           <div className="flex h-full items-center justify-center px-4 text-center">

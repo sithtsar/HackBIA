@@ -87,6 +87,32 @@ export async function postOntologyJoin(
   return (await res.json()) as JoinResponse;
 }
 
+export type MetricBody = {
+  name: string;
+  definition: string;
+  sql?: string;
+  source_tables: string[];
+};
+
+/** User-built metric (POST /api/ontology/metric, no LLM). The proposed node
+ * + object->metric derives edges arrive via SSE; response is the term id. */
+export async function postOntologyMetric(body: MetricBody): Promise<JoinResponse> {
+  const res = await fetch("/api/ontology/metric", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    // sql is optional server-side; omit the key entirely when blank.
+    body: JSON.stringify(body.sql?.trim() ? body : { ...body, sql: undefined }),
+  });
+  if (!res.ok) {
+    const detail = await res
+      .json()
+      .then((j: { detail?: string }) => j.detail)
+      .catch(() => undefined);
+    throw new Error(detail ?? `POST /api/ontology/metric failed: ${res.status}`);
+  }
+  return (await res.json()) as JoinResponse;
+}
+
 export async function postDataUpload(file: File): Promise<UploadResponse> {
   const body = new FormData();
   body.append("file", file);

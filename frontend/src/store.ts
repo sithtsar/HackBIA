@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import type { BoardState, EventEnvelope } from "./types";
-import { fetchState } from "./api";
+import { fetchState, postApproval } from "./api";
 import { reduceBoard } from "./reducer";
 import { connectEvents, type ConnectionStatus } from "./sse";
 
@@ -56,6 +56,10 @@ export type StoreValue = {
   /** Currently selected graph node / action id, or null. UI-only (not event-sourced). */
   selectedId: string | null;
   setSelectedId: (id: string | null) => void;
+  /** Approve every pending item, one POST at a time (action approvals
+   * trigger external pushes server-side — never parallelize). */
+  approveAll: () => Promise<void>;
+  approvingAll: boolean;
 };
 
 const StoreContext = createContext<StoreValue | null>(null);
@@ -125,6 +129,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setTimeout(() => dismissToast(id), TOAST_TTL_MS);
   };
 
+  const [approvingAll, setApprovingAll] = useState(false);
+  const approveAll = async (): Promise<void> => {
+    if (approvingAll || state.pending.length === 0) return;
+    setApprovingAll(true);
+    try {
+      // ponytail: snapshot of pending at click time — items arriving mid-loop
+      // wait for the next click. Sequential on purpose (see StoreValue doc).
+      for (const item of state.pending) {
+        await postApproval(item.subject_id, "approved");
+      }
+    } catch (err) {
+      pushToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setApprovingAll(false);
+    }
+  };
+
   const applyEvent = (envelope: EventEnvelope): void => {
     setState((prev) => reduceBoard(prev, envelope));
     setFeed((prev) => [...prev, envelope].slice(-FEED_CAP));
@@ -174,6 +195,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     pushToast,
     selectedId,
     setSelectedId,
+    approveAll,
+    approvingAll,
   };
 
   return createElement(StoreContext.Provider, { value }, children);

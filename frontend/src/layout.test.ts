@@ -64,7 +64,7 @@ describe("layoutGraph (fixed kind-columns)", () => {
       node("m_linked", "metric"),
     ];
     const edges: GraphEdge[] = [
-      { id: "e1", source: "m_linked", target: "obj_a", kind: "derives" },
+      { id: "e1", source: "obj_a", target: "m_linked", kind: "derives" }, // object -> metric, with data flow
     ];
 
     const byId = new Map(layoutGraph(nodes, edges).map((n) => [n.id, n]));

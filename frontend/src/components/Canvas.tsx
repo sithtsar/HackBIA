@@ -180,6 +180,20 @@ function NewNodesChip({ flowNodes }: { flowNodes: FoundryFlowNode[] }) {
   );
 }
 
+/** Lets the command palette's "Fit view" reach the React Flow instance
+ * without prop-drilling across the app (palette lives in the Topbar). */
+function FitOnEvent() {
+  const { fitView } = useReactFlow();
+  useEffect(() => {
+    const onFit = (): void => {
+      void fitView({ padding: 0.15, duration: 250 }); // user gesture, motion ok
+    };
+    window.addEventListener("foundry:fit", onFit);
+    return () => window.removeEventListener("foundry:fit", onFit);
+  }, [fitView]);
+  return null;
+}
+
 function sameCardData(a: FoundryNodeData, b: FoundryNodeData): boolean {
   return (
     a.label === b.label &&
@@ -362,6 +376,7 @@ export function Canvas({
       <ColumnHeaders />
       <Legend />
       <NewNodesChip flowNodes={flowNodes} />
+      <FitOnEvent />
     </ReactFlow>
   );
 }

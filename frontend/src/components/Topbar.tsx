@@ -9,6 +9,7 @@ import {
   postOntologyDraft,
   postReplay,
 } from "../api";
+import { CommandPalette, type PaletteActions } from "./CommandPalette";
 
 const DOT_COLOR: Record<ConnectionStatus, string> = {
   connected: "var(--color-committed-green)",
@@ -17,12 +18,6 @@ const DOT_COLOR: Record<ConnectionStatus, string> = {
 };
 
 const MANUAL_BASELINE = "45:00";
-
-const CANNED_QUESTIONS = [
-  "How many active customers do we have?",
-  "What's happening with support tickets in the last two weeks?",
-  "Which customers have the most open tickets?",
-] as const;
 
 type BusyState = "ask" | "replay" | "draft" | "upload" | "reset" | "export" | null;
 
@@ -59,7 +54,6 @@ export function Topbar() {
   const runActive = run.startedAt !== null && run.endedAt === null;
   const elapsed = useElapsedLabel(run);
 
-  const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState<BusyState>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -78,24 +72,18 @@ export function Topbar() {
     });
   };
 
-  const submitAsk = async (override?: string): Promise<void> => {
-    const trimmed = (override ?? question).trim();
+  const submitAsk = async (question: string): Promise<void> => {
+    const trimmed = question.trim();
     if (!trimmed || runActive || busy) return;
     setBusy("ask");
     setActionError(null);
     try {
       await postAsk(trimmed);
-      setQuestion("");
     } catch (err) {
       reportFailure(err, "ask failed");
     } finally {
       setBusy(null);
     }
-  };
-
-  const clickChip = (chip: string): void => {
-    setQuestion(chip);
-    void submitAsk(chip);
   };
 
   const runReplay = async (): Promise<void> => {
@@ -177,6 +165,17 @@ export function Topbar() {
     }
   };
 
+  // Rebuilt each render on purpose: the closures must see current busy/run
+  // guards (a useMemo([]) here would freeze busy=null forever).
+  const paletteActions: PaletteActions = {
+    ask: submitAsk,
+    draft: runDraft,
+    upload: () => fileInputRef.current?.click(),
+    replay: runReplay,
+    reset: runReset,
+    exportYaml: runExport,
+  };
+
   return (
     <header className="flex h-12 items-center border-b border-hairline bg-panel px-3">
       <div className="flex flex-1 items-center gap-2">
@@ -189,31 +188,7 @@ export function Topbar() {
       </div>
 
       <div className="flex flex-1 flex-col items-center">
-        <input
-          type="text"
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") void submitAsk();
-          }}
-          disabled={runActive || busy === "ask"}
-          placeholder="Ask a question about your data…"
-          className="w-full max-w-md rounded border border-hairline bg-canvas px-3 py-1.5 text-[12px] text-text-primary placeholder:text-text-secondary disabled:cursor-not-allowed disabled:opacity-60"
-        />
-        <div className="mt-1 flex max-w-md gap-1.5">
-          {CANNED_QUESTIONS.map((chip) => (
-            <button
-              key={chip}
-              type="button"
-              onClick={() => clickChip(chip)}
-              disabled={runActive || busy === "ask"}
-              title={chip}
-              className="truncate rounded border border-hairline bg-panel px-1.5 py-0.5 font-mono text-[11px] text-text-secondary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {chip}
-            </button>
-          ))}
-        </div>
+        <CommandPalette actions={paletteActions} />
         {actionError ? (
           <span className="mt-0.5 max-w-md truncate font-mono text-[10px] text-[#E5484D]">{actionError}</span>
         ) : null}
