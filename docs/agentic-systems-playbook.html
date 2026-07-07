@@ -292,8 +292,8 @@
 
     <div class="hero wrap-wide">
       <div class="eyebrow">A working reference for people who build with data, not with frameworks</div>
-      <h1 style="margin-top:14px;">Six problems every long‑running agent runs into — and how two real SDKs solve them</h1>
-      <p class="sub">This is a field guide, not a sales pitch. It walks through what actually breaks when you let an LLM run unattended for hours, shows — side by side, with real code — how <b style="color:var(--amber)">AWS Strands Agents SDK</b> and <b style="color:var(--teal)">Claude Code / the Claude Agent SDK</b> each solve it, then closes by pointing every concept at <b style="color:var(--violet)">Foundry‑Lite</b>, the actual codebase sitting in this repo's <code>backend/</code>.</p>
+      <h1 style="margin-top:14px;">Six problems every long-running agent runs into, and how two real SDKs solve them</h1>
+      <p class="sub">This is a field guide, not a sales pitch. It walks through what actually breaks when you let an LLM run unattended for hours, shows, side by side with real code, how <b style="color:var(--amber)">AWS Strands Agents SDK</b> and <b style="color:var(--teal)">Claude Code / the Claude Agent SDK</b> each solve it, then closes by pointing every concept at <b style="color:var(--violet)">Foundry-Lite</b>, the actual codebase sitting in this repo's <code>backend/</code>.</p>
       <div class="meta">
         <span>READ TIME <b>~45 MIN</b></span>
         <span>PREREQUISITES <b>SQL, PYTHON BASICS</b></span>
@@ -309,17 +309,17 @@
           <div class="trace-mark hil" style="left:70%"><div class="dot"></div><div class="lbl">Risky action →<br>human approval</div></div>
           <div class="trace-mark done" style="left:94%"><div class="dot"></div><div class="lbl">Task<br>completes</div></div>
         </div>
-        <div class="trace-caption">— every production agent lives on this timeline. The rest of this doc is about the five gaps in it.</div>
+        <div class="trace-caption">Every production agent lives on this timeline. The rest of this doc is about the five gaps in it.</div>
       </div>
     </div>
 
     <!-- ================= MENTAL MODEL ================= -->
     <section class="section wrap-wide" id="mental-model">
       <div class="wrap" style="padding:0;max-width:none;">
-      <span class="eyebrow">00 — Start Here</span>
+      <span class="eyebrow">00 &middot; Start Here</span>
       <h2>What an "agent" actually is</h2>
       <p class="lede">Strip away the branding and an agent is three unglamorous things wired into a loop: a language model, a set of tools it's allowed to call, and code that keeps feeding the model's output back to it until the task is done.</p>
-      <p>Concretely: you send the model a prompt plus a list of tools (each one just a name, a description, and a schema for its inputs — e.g. <code>run_sql(query: string)</code>). The model replies either with a final answer, or with a request to call one of those tools. Your code executes that tool call for real, appends the result to the conversation, and sends the whole thing back to the model. Repeat. That loop — <b>think → act → observe → think again</b> — is the entire trick.</p>
+      <p>Concretely: you send the model a prompt plus a list of tools (each one just a name, a description, and a schema for its inputs, e.g. <code>run_sql(query: string)</code>). The model replies either with a final answer, or with a request to call one of those tools. Your code executes that tool call for real, appends the result to the conversation, and sends the whole thing back to the model. Repeat. That loop (<b>think → act → observe → think again</b>) is the entire trick.</p>
       </div>
 
       <div class="diagram wrap-wide">
@@ -350,10 +350,10 @@
       </div>
 
       <div class="wrap" style="padding:0;max-width:none;">
-      <p>A demo agent runs that loop for thirty seconds in a notebook. A production agent runs it for hours, gets interrupted, needs to remember what it did yesterday, must not be allowed to run <code>DROP TABLE</code> just because a prompt-injected web page told it to, and sometimes needs to hand part of the job to a second, more specialized agent. Those five gaps between "demo loop" and "production system" are this document's table of contents — plus a sixth: the toolkit you build all of it out of.</p>
+      <p>A demo agent runs that loop for thirty seconds in a notebook. A production agent runs it for hours, gets interrupted, needs to remember what it did yesterday, must not be allowed to run <code>DROP TABLE</code> just because a prompt-injected web page told it to, and sometimes needs to hand part of the job to a second, more specialized agent. Those five gaps between "demo loop" and "production system" are this document's table of contents, plus a sixth: the toolkit you build all of it out of.</p>
       <div class="callout note">
         <span class="tag">Why two SDKs, not one</span>
-        <p>AWS Strands and Claude Code / the Claude Agent SDK solve the same five problems because every serious agent framework eventually has to. Reading them side by side is faster than reading either one alone — the contrast is what makes each design choice legible. Where a third, vendor‑neutral standard exists (MCP, and increasingly A2A), it's called out in <span style="color:var(--violet)">violet</span> because it isn't "theirs" — it's a wire format both sides can speak. Section 07 then does the same exercise against <b>this repository's own code</b>, so the concepts stop being abstract.</p>
+        <p>AWS Strands and Claude Code / the Claude Agent SDK solve the same five problems because every serious agent framework eventually has to. Reading them side by side is faster than reading either one alone. The contrast is what makes each design choice legible. Where a third, vendor-neutral standard exists (MCP, and increasingly A2A), it's called out in <span style="color:var(--violet)">violet</span> because it isn't "theirs": it's a wire format both sides can speak. Section 07 then does the same exercise against <b>this repository's own code</b>, so the concepts stop being abstract.</p>
       </div>
       </div>
     </section>
@@ -365,10 +365,10 @@
       <span class="eyebrow" style="display:block;margin-top:-6px;">Problem</span>
       <h2>Surviving a restart</h2>
       <p class="lede">Your agent has been talking to a customer for twenty minutes when the container it's running in gets redeployed, or your laptop sleeps, or the request just times out. Does the agent wake up remembering any of it?</p>
-      <p>By default: no. Everything — the conversation, any facts the agent had figured out, any partially-completed plan — lives in a Python object in RAM. The fix is a <b>session</b>: a serializable snapshot of that state, written somewhere durable, keyed by an ID you control, so a new process can rebuild the exact same agent by asking for that ID.</p>
+      <p>By default: no. Everything (the conversation, any facts the agent had figured out, any partially-completed plan) lives in a Python object in RAM. The fix is a <b>session</b>: a serializable snapshot of that state, written somewhere durable, keyed by an ID you control, so a new process can rebuild the exact same agent by asking for that ID.</p>
       <div class="callout fail">
         <span class="tag">Failure mode this prevents</span>
-        <p>Without sessions, every crash, redeploy, or horizontal scale-out event silently amnesia's the agent mid-task. Worse, in a multi-agent pipeline, it can also strand a task half-finished with no record of what already happened — leading to duplicate side effects on resume (e.g. sending the same email twice).</p>
+        <p>Without sessions, every crash, redeploy, or horizontal scale-out event silently amnesia's the agent mid-task. Worse, in a multi-agent pipeline, it can also strand a task half-finished with no record of what already happened, leading to duplicate side effects on resume (e.g. sending the same email twice).</p>
       </div>
       </div>
 
@@ -400,12 +400,12 @@
         <div class="cap">a crash between two turns loses nothing but the in-flight token stream</div>
       </div>
 
-      <div class="panel-title">Same Problem — Two Implementations</div>
+      <div class="panel-title">Same Problem, Two Implementations</div>
       <div class="patch">
         <div class="patch-col strands">
           <div class="who">Strands Agents SDK</div>
           <div class="mech">SessionManager (File / S3 backed)</div>
-          <p>A hook-based manager listens for lifecycle events (message added, invocation finished) and writes a snapshot to a pluggable backend. Swap <code>FileSessionManager</code> for <code>S3SessionManager</code> with zero other code changes — same key layout, different disk.</p>
+          <p>A hook-based manager listens for lifecycle events (message added, invocation finished) and writes a snapshot to a pluggable backend. Swap <code>FileSessionManager</code> for <code>S3SessionManager</code> with zero other code changes: same key layout, different disk.</p>
           <div class="code amber"><pre>from strands import Agent
 from strands.session.file_session_manager import FileSessionManager
 
@@ -417,22 +417,22 @@ agent("Hello!")
 agent2 = Agent(session_manager=FileSessionManager(
     session_id="user-42", storage_dir="./sessions"))</pre></div>
           <p style="margin-top:8px;">Persisted: the conversation, the conversation-manager's own state (see Problem 02), and a separate <code>AgentState</code> dict for facts you want to survive independent of the raw chat log.</p>
-          <div class="gotcha"><b>Extension point, not a wall:</b> <code>SessionManager</code> is an abstract hook provider — a custom Redis or DynamoDB backend is fully supported, not a workaround.</div>
+          <div class="gotcha"><b>Extension point, not a wall:</b> <code>SessionManager</code> is an abstract hook provider: a custom Redis or DynamoDB backend is fully supported, not a workaround.</div>
         </div>
         <div class="patch-divider"></div>
         <div class="patch-col claude">
           <div class="who">Claude Code / Agent SDK</div>
           <div class="mech">Local transcripts vs. server-side sessions</div>
-          <p>Two different products, two different answers. <b>Claude Code</b> (the CLI) writes a local JSONL transcript per session, tied to your working directory — resume it with <code>claude --resume</code>, branch it with <code>--fork-session</code>. The <b>Claude Agent SDK's</b> managed-agent surface instead keeps sessions server-side.</p>
-          <div class="code teal"><pre><span class="cm"># Claude Agent SDK — managed session (server-side)</span>
+          <p>Two different products, two different answers. <b>Claude Code</b> (the CLI) writes a local JSONL transcript per session, tied to your working directory, resume it with <code>claude --resume</code>, branch it with <code>--fork-session</code>. The <b>Claude Agent SDK's</b> managed-agent surface instead keeps sessions server-side.</p>
+          <div class="code teal"><pre><span class="cm"># Claude Agent SDK: managed session (server-side)</span>
 session = client.beta.sessions.create(
     agent=agent.id,
     environment_id=environment.id,
 )
 <span class="cm"># drive it by sending events; history lives on the server</span>
 session.events.send(type="user.message", content="…")</pre></div>
-          <p style="margin-top:8px;">No forking primitive on the managed side yet — a new task means a new session. Claude Code's local `--fork-session`, by contrast, is exactly the branching primitive Strands doesn't give you out of the box.</p>
-          <div class="gotcha"><b>Moving target:</b> the managed-agent API surface is newer and evolving fast — verify method names against current docs before shipping against it.</div>
+          <p style="margin-top:8px;">No forking primitive on the managed side yet: a new task means a new session. Claude Code's local `--fork-session`, by contrast, is exactly the branching primitive Strands doesn't give you out of the box.</p>
+          <div class="gotcha"><b>Moving target:</b> the managed-agent API surface is newer and evolving fast, verify method names against current docs before shipping against it.</div>
         </div>
       </div>
     </section>
@@ -443,22 +443,22 @@ session.events.send(type="user.message", content="…")</pre></div>
       <span class="problem-num">02</span>
       <span class="eyebrow" style="display:block;margin-top:-6px;">Problem</span>
       <h2>Not blowing up the context window</h2>
-      <p class="lede">Every model has a hard ceiling on how much conversation it can see at once. An agent that runs for hours accumulates messages — including big, boring tool outputs like a 500-row query result — far faster than a human chat does.</p>
+      <p class="lede">Every model has a hard ceiling on how much conversation it can see at once. An agent that runs for hours accumulates messages (including big, boring tool outputs like a 500-row query result) far faster than a human chat does.</p>
       <p>There are two genuinely different things people lump together as "memory," and conflating them is the single most common design mistake in this space:</p>
       <ul>
-        <li><b>Conversation memory</b> — the raw back-and-forth, sitting inside the context window, subject to a hard token ceiling.</li>
-        <li><b>Knowledge memory</b> — durable facts stored <em>outside</em> the context window, pulled back in only when needed, immune to trimming.</li>
+        <li><b>Conversation memory</b>: the raw back-and-forth, sitting inside the context window, subject to a hard token ceiling.</li>
+        <li><b>Knowledge memory</b>: durable facts stored <em>outside</em> the context window, pulled back in only when needed, immune to trimming.</li>
       </ul>
       <div class="callout fail">
         <span class="tag">Failure mode this prevents</span>
-        <p>Hit the ceiling with no plan and one of two bad things happens: the provider throws a hard error and the agent dies mid-task, or a naive truncation silently drops the system instructions and early decisions — and the agent starts confidently contradicting itself with no idea why.</p>
+        <p>Hit the ceiling with no plan and one of two bad things happens: the provider throws a hard error and the agent dies mid-task, or a naive truncation silently drops the system instructions and early decisions, and the agent starts confidently contradicting itself with no idea why.</p>
       </div>
       </div>
 
       <div class="diagram wrap-wide">
         <svg viewBox="0 0 680 200" role="img" aria-labelledby="d3t">
           <title id="d3t">Messages filling the context window until a limit line is hit, then the oldest ones collapse into one summary block.</title>
-          <text x="10" y="26" class="dlbl" style="fill:var(--paper-dimmer);font-size:11px">BEFORE — raw conversation grows unbounded</text>
+          <text x="10" y="26" class="dlbl" style="fill:var(--paper-dimmer);font-size:11px">BEFORE: raw conversation grows unbounded</text>
           <rect x="10" y="36" width="46" height="30" rx="4" style="fill:var(--panel-2);stroke:var(--paper-dimmer);stroke-width:1.5;filter:url(#sketchy)"/>
           <rect x="62" y="36" width="46" height="30" rx="4" style="fill:var(--panel-2);stroke:var(--paper-dimmer);stroke-width:1.5;filter:url(#sketchy)"/>
           <rect x="114" y="36" width="46" height="30" rx="4" style="fill:var(--panel-2);stroke:var(--paper-dimmer);stroke-width:1.5;filter:url(#sketchy)"/>
@@ -471,7 +471,7 @@ session.events.send(type="user.message", content="…")</pre></div>
           <text x="369" y="55" text-anchor="middle" class="dlbl" style="fill:var(--alert);font-size:16px">✕</text>
           <text x="369" y="80" text-anchor="middle" class="dlbl" style="fill:var(--alert);font-size:9px">overflow error</text>
 
-          <text x="10" y="118" class="dlbl" style="fill:var(--paper-dimmer);font-size:11px">AFTER — a conversation manager keeps it bounded</text>
+          <text x="10" y="118" class="dlbl" style="fill:var(--paper-dimmer);font-size:11px">AFTER: a conversation manager keeps it bounded</text>
           <rect x="10" y="128" width="70" height="34" rx="5" style="fill:var(--amber-dim);stroke:var(--amber);stroke-width:2;filter:url(#sketchy)"/>
           <text x="45" y="149" text-anchor="middle" class="dtxt" style="fill:var(--amber);font-size:11px">SUMMARY</text>
           <text x="45" y="176" text-anchor="middle" class="dlbl" style="fill:var(--paper-dimmer);font-size:9px">oldest 30%</text>
@@ -489,12 +489,12 @@ session.events.send(type="user.message", content="…")</pre></div>
         <div class="cap">summarizing trims the window; knowledge memory sidesteps it completely</div>
       </div>
 
-      <div class="panel-title">Same Problem — Two Implementations</div>
+      <div class="panel-title">Same Problem, Two Implementations</div>
       <div class="patch">
         <div class="patch-col strands">
           <div class="who">Strands Agents SDK</div>
           <div class="mech">ConversationManager + AgentState / memory tools</div>
-          <p>Three swappable managers own <code>agent.messages</code>: <code>SlidingWindowConversationManager</code> (default — drops oldest messages once you exceed <code>window_size</code>, 40 by default; keeps tool-call/result pairs intact), <code>SummarizingConversationManager</code> (reactively summarizes the oldest <code>summary_ratio</code> — 0.3 by default — via an LLM call <em>only</em> when the provider raises a context-overflow error, always preserving the last <code>preserve_recent_messages</code>, 10 by default), and <code>NullConversationManager</code> (no-op, for stateful models managing their own history server-side).</p>
+          <p>Three swappable managers own <code>agent.messages</code>: <code>SlidingWindowConversationManager</code> (default: drops oldest messages once you exceed <code>window_size</code>, 40 by default; keeps tool-call/result pairs intact), <code>SummarizingConversationManager</code> (reactively summarizes the oldest <code>summary_ratio</code> (0.3 by default) via an LLM call <em>only</em> when the provider raises a context-overflow error, always preserving the last <code>preserve_recent_messages</code>, 10 by default), and <code>NullConversationManager</code> (no-op, for stateful models managing their own history server-side).</p>
           <div class="code amber"><pre>from strands.agent.conversation_manager import SummarizingConversationManager
 
 manager = SummarizingConversationManager(
@@ -502,19 +502,19 @@ manager = SummarizingConversationManager(
     preserve_recent_messages=5,  <span class="cm"># never touch the last 5</span>
 )
 agent = Agent(model=model, conversation_manager=manager)</pre></div>
-          <p style="margin-top:8px;">For durable facts, a separate <code>AgentState</code> dict survives independent of the conversation, and the companion <code>strands-agents-tools</code> package ships retrieval tools (<code>mem0_memory</code>, Bedrock Knowledge Bases, Elasticsearch/MongoDB vector search) — knowledge memory the agent pulls in on demand.</p>
+          <p style="margin-top:8px;">For durable facts, a separate <code>AgentState</code> dict survives independent of the conversation, and the companion <code>strands-agents-tools</code> package ships retrieval tools (<code>mem0_memory</code>, Bedrock Knowledge Bases, Elasticsearch/MongoDB vector search): knowledge memory the agent pulls in on demand.</p>
           <div class="gotcha"><b>Counts messages, not tokens:</b> the sliding window is message-count-based; the real token check happens server-side at the model provider and only then triggers a reduction.</div>
         </div>
         <div class="patch-divider"></div>
         <div class="patch-col claude">
           <div class="who">Claude Code / Agent SDK</div>
           <div class="mech">Auto-compaction + the Memory tool</div>
-          <p>Claude Code auto-compacts as context fills: older tool output goes first, then a summarization pass, with a <code>PreCompact</code> hook that fires beforehand so you can force-preserve something critical. The managed Agent SDK does the same thing fully automatically, with no exposed hook — compaction there is deterministic infrastructure, not a decision point.</p>
-          <div class="code teal"><pre><span class="cm"># Messages API — a persistent, agent-managed memory store</span>
+          <p>Claude Code auto-compacts as context fills: older tool output goes first, then a summarization pass, with a <code>PreCompact</code> hook that fires beforehand so you can force-preserve something critical. The managed Agent SDK does the same thing fully automatically, with no exposed hook: compaction there is deterministic infrastructure, not a decision point.</p>
+          <div class="code teal"><pre><span class="cm"># Messages API: a persistent, agent-managed memory store</span>
 tools = [{"type": "memory_20250818", "name": "memory"}]
 <span class="cm"># Claude issues: view /memories, create /memories/findings.md, …
 # your handler executes those against real storage (disk, DB, S3)</span></pre></div>
-          <p style="margin-top:8px;">Knowledge memory here is the <b>Memory tool</b>: a client-side <code>/memories</code> directory Claude reads and writes explicitly — the direct analogue of Strands' <code>mem0_memory</code>. Separately, <code>CLAUDE.md</code> (checked-in project rules) and auto-generated <code>MEMORY.md</code> give Claude Code persistent context loaded fresh at every session start.</p>
+          <p style="margin-top:8px;">Knowledge memory here is the <b>Memory tool</b>: a client-side <code>/memories</code> directory Claude reads and writes explicitly. It's the direct analogue of Strands' <code>mem0_memory</code>. Separately, <code>CLAUDE.md</code> (checked-in project rules) and auto-generated <code>MEMORY.md</code> give Claude Code persistent context loaded fresh at every session start.</p>
           <div class="gotcha"><b>Put durable rules in CLAUDE.md, not mid-conversation:</b> instructions given early in a long session are exactly what compaction is most likely to compress away.</div>
         </div>
       </div>
@@ -526,8 +526,8 @@ tools = [{"type": "memory_20250818", "name": "memory"}]
       <span class="problem-num">03</span>
       <span class="eyebrow" style="display:block;margin-top:-6px;">Problem</span>
       <h2>Not letting the agent nuke your infra</h2>
-      <p class="lede">The moment an agent can run shell commands or write code, you've handed an LLM — which can be manipulated by text it reads, e.g. a poisoned web page or a crafted support ticket — a way to execute arbitrary instructions on whatever machine it's running on.</p>
-      <p>The fix is isolating <em>where</em> tool execution happens, so the blast radius of a bad instruction is a disposable box, not your production host. There's a second, lighter-weight version of the same idea worth knowing: instead of sandboxing the process, you sandbox the <em>output</em> — validate that whatever the model generated is provably safe before it ever runs. Section 07 has a real, minimal example of exactly that.</p>
+      <p class="lede">The moment an agent can run shell commands or write code, you've handed an LLM (which can be manipulated by text it reads, e.g. a poisoned web page or a crafted support ticket) a way to execute arbitrary instructions on whatever machine it's running on.</p>
+      <p>The fix is isolating <em>where</em> tool execution happens, so the blast radius of a bad instruction is a disposable box, not your production host. There's a second, lighter-weight version of the same idea worth knowing: instead of sandboxing the process, you sandbox the <em>output</em>: validate that whatever the model generated is provably safe before it ever runs. Section 07 has a real, minimal example of exactly that.</p>
       <div class="callout fail">
         <span class="tag">Failure mode this prevents</span>
         <p>Prompt injection → arbitrary code execution on your host → data exfiltration or lateral movement into your real infrastructure. This isn't hypothetical: any tool that shells out or evaluates code, given untrusted input anywhere in its context, is a remote-code-execution primitive by default.</p>
@@ -551,19 +551,19 @@ tools = [{"type": "memory_20250818", "name": "memory"}]
           <text x="565" y="111" text-anchor="middle" class="dtxt" style="fill:var(--alert);font-size:12px">PROD INFRA</text>
 
           <path d="M120,98 L246,98" style="stroke:var(--teal);stroke-width:2;fill:none" marker-end="url(#arrow)"/>
-          <text x="150" y="86" class="dlbl" style="fill:var(--teal);font-size:9.5px">tool call — allowed</text>
+          <text x="150" y="86" class="dlbl" style="fill:var(--teal);font-size:9.5px">tool call: allowed</text>
           <path d="M410,98 L496,98" style="stroke:var(--alert);stroke-width:2;fill:none;stroke-dasharray:4 4" marker-end="url(#arrow)"/>
           <text x="465" y="60" text-anchor="middle" class="dlbl" style="fill:var(--alert);font-size:20px">✕</text>
           <text x="450" y="150" class="dlbl" style="fill:var(--alert);font-size:9.5px">blocked by the boundary</text>
         </svg>
-        <div class="cap">a bad instruction can still run — it just can't leave the box</div>
+        <div class="cap">a bad instruction can still run; it just can't leave the box</div>
       </div>
 
-      <div class="panel-title">Same Problem — Two Implementations</div>
+      <div class="panel-title">Same Problem, Two Implementations</div>
       <div class="patch">
         <div class="patch-col strands">
           <div class="who">Strands Agents SDK</div>
-          <div class="mech">Sandbox backends (opt in) — default is unsafe</div>
+          <div class="mech">Sandbox backends (opt in): default is unsafe</div>
           <p>Strands' <code>strands.sandbox</code> module decouples tool execution from the agent process: a pluggable backend (e.g. <code>DockerSandbox</code>) exposes <code>execute</code>, <code>execute_code</code>, and file read/write, and passing it to <code>Agent(sandbox=...)</code> auto-vends <code>sandbox_bash</code>/<code>sandbox_file_editor</code> tools that run inside it.</p>
           <div class="code amber"><pre>from strands import Agent
 from strands.sandbox import DockerSandbox
@@ -571,21 +571,21 @@ from strands.sandbox import DockerSandbox
 agent = Agent(sandbox=DockerSandbox(container="scratch-box"))
 agent("List all files in the current directory")
 <span class="cm"># runs sandbox_bash *inside* the container, not on your host</span></pre></div>
-          <div class="gotcha"><b>The default is named for exactly this reason:</b> omit <code>sandbox=</code> and you get <code>NotASandboxLocalEnvironment</code> — it runs with the full privileges of the host process. The separate <code>strands-agents-tools</code> package's shell/REPL tools instead use a human-confirmation prompt (<code>BYPASS_TOOL_CONSENT</code>) — a weaker, non-isolating safeguard. Don't confuse the two.</div>
+          <div class="gotcha"><b>The default is named for exactly this reason:</b> omit <code>sandbox=</code> and you get <code>NotASandboxLocalEnvironment</code>: it runs with the full privileges of the host process. The separate <code>strands-agents-tools</code> package's shell/REPL tools instead use a human-confirmation prompt (<code>BYPASS_TOOL_CONSENT</code>), a weaker, non-isolating safeguard. Don't confuse the two.</div>
         </div>
         <div class="patch-divider"></div>
         <div class="patch-col claude">
           <div class="who">Claude Code / Agent SDK</div>
           <div class="mech">Permission modes + managed cloud sandboxes</div>
-          <p>Claude Code's default posture is permission rules, not process isolation: <code>default</code> prompts on edits/shell commands, <code>plan</code> lets Claude read and reason but never write, <code>acceptEdits</code> auto-accepts safe file ops, <code>bypassPermissions</code> skips prompts entirely. Optional OS-level sandboxing can additionally restrict Bash to allowed directories/domains — permissions and sandbox rules both apply, together.</p>
-          <div class="code teal"><pre><span class="cm"># settings.json — deny a class of destructive commands outright</span>
+          <p>Claude Code's default posture is permission rules, not process isolation: <code>default</code> prompts on edits/shell commands, <code>plan</code> lets Claude read and reason but never write, <code>acceptEdits</code> auto-accepts safe file ops, <code>bypassPermissions</code> skips prompts entirely. Optional OS-level sandboxing can additionally restrict Bash to allowed directories/domains. Permissions and sandbox rules both apply, together.</p>
+          <div class="code teal"><pre><span class="cm"># settings.json: deny a class of destructive commands outright</span>
 {
   "permissions": {
     "deny": ["Bash(rm -rf *)", "Bash(git push --force*)"]
   }
 }</pre></div>
           <p style="margin-top:8px;">The managed Agent SDK takes the Strands-style approach by default instead: bash, file ops, and code execution run inside Anthropic-managed (or self-hosted) cloud sandboxes, with filesystem/network isolation as the enforcement layer rather than per-command prompts.</p>
-          <div class="gotcha"><b>Plan mode is a sandbox substitute for exploration:</b> when you just need Claude to look around and reason, it needs zero write privileges to do that — force it via <code>plan</code> instead of trusting a permission prompt to catch every edit.</div>
+          <div class="gotcha"><b>Plan mode is a sandbox substitute for exploration:</b> when you just need Claude to look around and reason, it needs zero write privileges to do that: force it via <code>plan</code> instead of trusting a permission prompt to catch every edit.</div>
         </div>
       </div>
     </section>
@@ -596,11 +596,11 @@ agent("List all files in the current directory")
       <span class="problem-num">04</span>
       <span class="eyebrow" style="display:block;margin-top:-6px;">Problem</span>
       <h2>Getting a human to say yes before something irreversible</h2>
-      <p class="lede">Sandboxing bounds the blast radius of a <em>bad</em> action. It does nothing for a <em>correct</em> action you'd still rather a person confirm — deleting the right record, sending the real email, wiring real money. That's human-in-the-loop (HIL): a deliberate pause, at one specific point, that resumes exactly where it left off once a person answers.</p>
-      <p>The naive alternatives both fail: hard-blocking the tool means the agent literally can't do part of its job; trusting the model's judgment means you're one clever prompt injection away from an unapproved action going through anyway. HIL is the third option — the agent <em>can</em> do it, but only after a person says so.</p>
+      <p class="lede">Sandboxing bounds the blast radius of a <em>bad</em> action. It does nothing for a <em>correct</em> action you'd still rather a person confirm: deleting the right record, sending the real email, wiring real money. That's human-in-the-loop (HIL): a deliberate pause, at one specific point, that resumes exactly where it left off once a person answers.</p>
+      <p>The naive alternatives both fail: hard-blocking the tool means the agent literally can't do part of its job; trusting the model's judgment means you're one clever prompt injection away from an unapproved action going through anyway. HIL is the third option: the agent <em>can</em> do it, but only after a person says so.</p>
       <div class="callout fail">
         <span class="tag">Failure mode this prevents</span>
-        <p>An agent with real-world write access (send, delete, pay, deploy) that has no approval gate will eventually execute one of those actions on bad reasoning, a hallucinated fact, or an injected instruction — with no human ever in the decision.</p>
+        <p>An agent with real-world write access (send, delete, pay, deploy) that has no approval gate will eventually execute one of those actions on bad reasoning, a hallucinated fact, or an injected instruction, with no human ever in the decision.</p>
       </div>
       </div>
 
@@ -628,15 +628,15 @@ agent("List all files in the current directory")
           <path d="M450,100 Q480,125 496,128" style="stroke:var(--paper-dimmer);stroke-width:2;fill:none" marker-end="url(#arrow)"/>
           <text x="330" y="30" text-anchor="middle" class="dlbl" style="fill:var(--paper-dimmer);font-size:10px">a human reviews the reason string</text>
         </svg>
-        <div class="cap">the pause is resumable — the human's answer re-enters exactly where the run stopped, nothing is replayed</div>
+        <div class="cap">the pause is resumable: the human's answer re-enters exactly where the run stopped, nothing is replayed</div>
       </div>
 
-      <div class="panel-title">Same Problem — Two Implementations</div>
+      <div class="panel-title">Same Problem, Two Implementations</div>
       <div class="patch">
         <div class="patch-col strands">
           <div class="who">Strands Agents SDK</div>
           <div class="mech">interrupt() / InterruptException</div>
-          <p>A hook (typically on <code>BeforeToolCallEvent</code>) calls <code>event.interrupt(name, reason)</code>. With no stored answer yet, this raises <code>InterruptException</code>, which unwinds the run: <code>result.stop_reason == "interrupt"</code> and <code>result.interrupts</code> lists what's pending. Your app shows the reason to a human, then re-invokes the agent with the answer — the <em>same</em> interrupt call now returns it instead of raising, and execution resumes at that exact point.</p>
+          <p>A hook (typically on <code>BeforeToolCallEvent</code>) calls <code>event.interrupt(name, reason)</code>. With no stored answer yet, this raises <code>InterruptException</code>, which unwinds the run: <code>result.stop_reason == "interrupt"</code> and <code>result.interrupts</code> lists what's pending. Your app shows the reason to a human, then re-invokes the agent with the answer: the <em>same</em> interrupt call now returns it instead of raising, and execution resumes at that exact point.</p>
           <div class="code amber"><pre>class ToolApprovalHook(HookProvider):
     def register_hooks(self, registry, **kwargs):
         registry.add_callback(BeforeToolCallEvent, self.gate)
@@ -652,7 +652,7 @@ result = agent("delete record 42")
 if result.stop_reason == "interrupt":
     i = result.interrupts[0]
     result = agent([{"interruptResponse": {"interruptId": i.id, "response": "yes"}}])</pre></div>
-          <div class="gotcha">This works identically inside a <code>Graph</code> or <code>Swarm</code> (Problem 05) — the whole flow pauses at the node that raised it, not just a single agent.</div>
+          <div class="gotcha">This works identically inside a <code>Graph</code> or <code>Swarm</code> (Problem 05): the whole flow pauses at the node that raised it, not just a single agent.</div>
         </div>
         <div class="patch-divider"></div>
         <div class="patch-col claude">
@@ -660,7 +660,7 @@ if result.stop_reason == "interrupt":
           <div class="mech">PreToolUse hooks + permission prompts + plan mode</div>
           <p>Claude Code's HIL layer is two things stacked: broad <b>permission rules</b> ("ask before any Bash command") and specific <b>PreToolUse hooks</b> that inspect the actual command and can deny it outright, mechanically, with no LLM judgment involved in the block itself.</p>
           <div class="code teal"><pre>#!/bin/bash
-<span class="cm"># .claude/hooks/block-destructive.sh — reads tool call as JSON on stdin</span>
+<span class="cm"># .claude/hooks/block-destructive.sh: reads tool call as JSON on stdin</span>
 CMD=$(jq -r '.tool_input.command' &lt; /dev/stdin)
 if echo "$CMD" | grep -qE 'rm -rf|DROP TABLE'; then
   echo '{"hookSpecificOutput":{"permissionDecision":"deny",
@@ -669,7 +669,7 @@ if echo "$CMD" | grep -qE 'rm -rf|DROP TABLE'; then
 fi
 exit 0</pre></div>
           <p style="margin-top:8px;">Registered under <code>PreToolUse</code> in <code>settings.json</code> with a matcher (e.g. <code>Bash</code>). <b>Plan mode</b> is HIL applied one level up: the whole exploration-then-edit sequence is split into "look" (no approval needed) and "act" (a human reviews the plan before anything executes).</p>
-          <div class="gotcha"><b>The mechanism, not the model, blocks the action:</b> a hook is a deterministic script — it doesn't ask the LLM whether a command looks safe, it pattern-matches and refuses. That's the entire point.</div>
+          <div class="gotcha"><b>The mechanism, not the model, blocks the action:</b> a hook is a deterministic script: it doesn't ask the LLM whether a command looks safe, it pattern-matches and refuses. That's the entire point.</div>
         </div>
       </div>
     </section>
@@ -680,10 +680,10 @@ exit 0</pre></div>
       <span class="problem-num">05</span>
       <span class="eyebrow" style="display:block;margin-top:-6px;">Problem</span>
       <h2>Coordinating more than one agent</h2>
-      <p class="lede">A single agent with fifty tools and a kitchen-sink prompt gets worse, not better, at every one of them. Past a certain complexity, splitting work across specialized agents — one that only does SQL, one that only writes reports — outperforms one generalist trying to do everything.</p>
+      <p class="lede">A single agent with fifty tools and a kitchen-sink prompt gets worse, not better, at every one of them. Past a certain complexity, splitting work across specialized agents (one that only does SQL, one that only writes reports) outperforms one generalist trying to do everything.</p>
       <div class="callout fail">
         <span class="tag">Failure mode this prevents</span>
-        <p>A single overloaded agent silently does a mediocre job across the board — hard to detect, because it still "works," just worse. Specialization also bounds each agent's tool access, which is a security property, not just a quality one (a report-writer agent shouldn't hold delete permissions on the database).</p>
+        <p>A single overloaded agent silently does a mediocre job across the board: hard to detect, because it still "works," just worse. Specialization also bounds each agent's tool access, which is a security property, not just a quality one (a report-writer agent shouldn't hold delete permissions on the database).</p>
       </div>
       </div>
 
@@ -691,7 +691,7 @@ exit 0</pre></div>
         <div class="diagram" style="margin:0;">
           <svg viewBox="0 0 320 200" role="img" aria-labelledby="d6t">
             <title id="d6t">Graph pattern: a fixed pipeline, research feeds analyze feeds report, with a conditional skip edge.</title>
-            <text x="160" y="20" text-anchor="middle" class="dlbl" style="fill:var(--amber);font-size:11px">GRAPH — fixed pipeline</text>
+            <text x="160" y="20" text-anchor="middle" class="dlbl" style="fill:var(--amber);font-size:11px">GRAPH: fixed pipeline</text>
             <rect x="10" y="80" width="80" height="42" rx="6" style="fill:var(--amber-dim);stroke:var(--amber);stroke-width:2;filter:url(#sketchy)"/>
             <text x="50" y="105" text-anchor="middle" class="dtxt" style="fill:var(--amber);font-size:11px">RESEARCH</text>
             <rect x="120" y="80" width="80" height="42" rx="6" style="fill:var(--amber-dim);stroke:var(--amber);stroke-width:2;filter:url(#sketchy)"/>
@@ -701,14 +701,14 @@ exit 0</pre></div>
             <path d="M90,101 L116,101" style="stroke:var(--amber);stroke-width:2;fill:none" marker-end="url(#arrow)"/>
             <path d="M200,101 L226,101" style="stroke:var(--amber);stroke-width:2;fill:none" marker-end="url(#arrow)"/>
             <path d="M50,78 Q160,40 270,76" style="stroke:var(--paper-dimmer);stroke-width:1.5;fill:none;stroke-dasharray:4 4" marker-end="url(#arrow)"/>
-            <text x="160" y="52" text-anchor="middle" class="dlbl" style="fill:var(--paper-dimmer);font-size:9px">if condition met — skip ahead</text>
+            <text x="160" y="52" text-anchor="middle" class="dlbl" style="fill:var(--paper-dimmer);font-size:9px">if condition met, skip ahead</text>
           </svg>
           <div class="cap">order is the point; wave-executes any nodes whose deps are ready</div>
         </div>
         <div class="diagram" style="margin:0;">
           <svg viewBox="0 0 320 200" role="img" aria-labelledby="d7t">
             <title id="d7t">Swarm pattern: three agents hand off to each other based on judgment, not a fixed order.</title>
-            <text x="160" y="20" text-anchor="middle" class="dlbl" style="fill:var(--teal);font-size:11px">SWARM — judgment-driven handoff</text>
+            <text x="160" y="20" text-anchor="middle" class="dlbl" style="fill:var(--teal);font-size:11px">SWARM: judgment-driven handoff</text>
             <circle cx="160" cy="70" r="34" style="fill:var(--teal-dim);stroke:var(--teal);stroke-width:2;filter:url(#sketchy)"/>
             <text x="160" y="75" text-anchor="middle" class="dtxt" style="fill:var(--teal);font-size:11px">TRIAGE</text>
             <circle cx="80" cy="150" r="34" style="fill:var(--teal-dim);stroke:var(--teal);stroke-width:2;filter:url(#sketchy)"/>
@@ -728,28 +728,28 @@ exit 0</pre></div>
         <tr><th>Pattern</th><th>Strands Agents SDK</th><th>Claude Code / Agent SDK</th></tr>
         <tr>
           <td><b>Fixed pipeline (DAG)</b><br><span style="font-size:13px;color:var(--paper-dimmer)">output of A feeds B feeds C, order matters</span></td>
-          <td class="strands">Graph — GraphBuilder, GraphNode, GraphEdge (optional conditions), wave-based parallel execution of ready nodes; cycles allowed under max_node_executions/execution_timeout</td>
-          <td class="claude">Subagent-per-stage, orchestrated by the main agent's own reasoning — no formal DAG primitive; you sequence it in prompts/code</td>
+          <td class="strands">Graph: GraphBuilder, GraphNode, GraphEdge (optional conditions), wave-based parallel execution of ready nodes; cycles allowed under max_node_executions/execution_timeout</td>
+          <td class="claude">Subagent-per-stage, orchestrated by the main agent's own reasoning: no formal DAG primitive; you sequence it in prompts/code</td>
         </tr>
         <tr>
           <td><b>Judgment-driven handoff</b><br><span style="font-size:13px;color:var(--paper-dimmer)">agents decide who runs next</span></td>
-          <td class="strands">Swarm — a handoff_to_agent tool every member can call, shared context object, runs until an agent finishes without handing off</td>
-          <td class="claude">The Task/Agent tool — main agent dispatches to a subagent by description match; subagent returns a summary, not raw output</td>
+          <td class="strands">Swarm: a handoff_to_agent tool every member can call, shared context object, runs until an agent finishes without handing off</td>
+          <td class="claude">The Task/Agent tool: main agent dispatches to a subagent by description match; subagent returns a summary, not raw output</td>
         </tr>
         <tr>
           <td><b>Isolation</b></td>
           <td class="strands">Each graph/swarm node keeps its own message history unless explicitly shared via context</td>
-          <td class="claude">Each subagent gets a genuinely fresh context window — nothing from the main session leaks in except the delegation prompt</td>
+          <td class="claude">Each subagent gets a genuinely fresh context window: nothing from the main session leaks in except the delegation prompt</td>
         </tr>
         <tr>
           <td><b>Cross-vendor agent-to-agent</b></td>
-          <td colspan="2" class="violet" style="font-size:13px;">A2A (Agent2Agent) — an open protocol (Google-originated) for agents built by <em>different</em> vendors to talk to each other. Not native to either SDK, but Claude agents can be wrapped as A2A servers, and it's the standard to reach for once "my agent" needs to talk to "someone else's agent."</td>
+          <td colspan="2" class="violet" style="font-size:13px;">A2A (Agent2Agent): an open protocol (Google-originated) for agents built by <em>different</em> vendors to talk to each other. Not native to either SDK, but Claude agents can be wrapped as A2A servers, and it's the standard to reach for once "my agent" needs to talk to "someone else's agent."</td>
         </tr>
       </table>
 
       <div class="callout shared wrap-wide" style="max-width:960px;margin-left:auto;margin-right:auto;">
-        <span class="tag">Shared standard — not either vendor's</span>
-        <p><b>MCP vs. A2A, in one line:</b> MCP connects an agent to <em>tools and data</em> (a database, an API, a filesystem). A2A connects an agent to <em>another agent</em>. Use MCP for "give my agent a new capability." Reach for A2A only when two independently-built agents — possibly from different companies — need to hand work to each other.</p>
+        <span class="tag">Shared standard: not either vendor's</span>
+        <p><b>MCP vs. A2A, in one line:</b> MCP connects an agent to <em>tools and data</em> (a database, an API, a filesystem). A2A connects an agent to <em>another agent</em>. Use MCP for "give my agent a new capability." Reach for A2A only when two independently-built agents (possibly from different companies) need to hand work to each other.</p>
       </div>
     </section>
 
@@ -759,14 +759,14 @@ exit 0</pre></div>
       <span class="problem-num">06</span>
       <span class="eyebrow" style="display:block;margin-top:-6px;">Problem</span>
       <h2>Building it out of reusable parts, not one giant prompt</h2>
-      <p class="lede">Everything above — sessions, compaction, sandboxes, HIL gates, orchestration — needs to be <em>composed</em> without turning into an unmaintainable pile of one-off glue code. Claude's ecosystem names four specific building blocks for exactly this. Strands solves the same composition problem through tools and hooks, with less of a formal packaging layer around them.</p>
+      <p class="lede">Everything above (sessions, compaction, sandboxes, HIL gates, orchestration) needs to be <em>composed</em> without turning into an unmaintainable pile of one-off glue code. Claude's ecosystem names four specific building blocks for exactly this. Strands solves the same composition problem through tools and hooks, with less of a formal packaging layer around them.</p>
       </div>
 
       <div class="diagram wrap-wide">
         <svg viewBox="0 0 640 260" role="img" aria-labelledby="d8t">
           <title id="d8t">A subagent at the center, connected to hooks, skills, and MCP servers, the whole thing bundled by a plugin.</title>
           <rect x="60" y="30" width="520" height="200" rx="14" style="fill:none;stroke:var(--violet);stroke-width:2;stroke-dasharray:7 6;filter:url(#sketchy)"/>
-          <text x="320" y="20" text-anchor="middle" class="dlbl" style="fill:var(--violet);font-size:11px">PLUGIN — one install / update / disable unit</text>
+          <text x="320" y="20" text-anchor="middle" class="dlbl" style="fill:var(--violet);font-size:11px">PLUGIN: one install / update / disable unit</text>
 
           <rect x="255" y="105" width="130" height="50" rx="8" style="fill:var(--teal-dim);stroke:var(--teal);stroke-width:2.5;filter:url(#sketchy)"/>
           <text x="320" y="135" text-anchor="middle" class="dtxt" style="fill:var(--teal);font-size:14px">SUBAGENT</text>
@@ -793,17 +793,17 @@ exit 0</pre></div>
         <tr>
           <td class="claude">Hooks</td>
           <td>Shell commands wired to lifecycle events (<code>PreToolUse</code>, <code>PostToolUse</code>, <code>SessionStart</code>, <code>PreCompact</code>, …), configured in <code>settings.json</code>.</td>
-          <td>Deterministic guardrails — a script either allows or denies an action; it never "hopes the model behaves." This is the actual machinery behind Problem 04.</td>
+          <td>Deterministic guardrails: a script either allows or denies an action; it never "hopes the model behaves." This is the actual machinery behind Problem 04.</td>
         </tr>
         <tr>
           <td class="claude">Skills</td>
-          <td>A markdown file (<code>SKILL.md</code>) with a name, a trigger description, and a procedure — plus optional scripts/reference files. Loads into context only when invoked.</td>
+          <td>A markdown file (<code>SKILL.md</code>) with a name, a trigger description, and a procedure, plus optional scripts/reference files. Loads into context only when invoked.</td>
           <td>Write a multi-step procedure once (e.g. "how we deploy," "how we review a PR"), reuse it across every session without re-explaining it or paying its full token cost until it's actually needed.</td>
         </tr>
         <tr>
           <td class="claude">Subagents</td>
           <td>A markdown file (<code>.claude/agents/name.md</code>) with a restricted tool list, a dedicated system prompt, and its own context window.</td>
-          <td>The packaging half of Problem 05 — a specialist you can hand a task to, whose intermediate work never floods your main conversation.</td>
+          <td>The packaging half of Problem 05: a specialist you can hand a task to, whose intermediate work never floods your main conversation.</td>
         </tr>
         <tr>
           <td class="claude">Plugins</td>
@@ -813,11 +813,11 @@ exit 0</pre></div>
         <tr>
           <td class="violet">MCP servers</td>
           <td>An external process exposing tools/resources/prompts over a standard protocol (stdio or HTTP), configured once and available to any MCP-compatible client.</td>
-          <td>Write a tool integration once, use it from Claude Code, Claude Desktop, a Strands agent, or anything else that speaks MCP — instead of re-implementing "connect to Salesforce" inside every framework separately.</td>
+          <td>Write a tool integration once, use it from Claude Code, Claude Desktop, a Strands agent, or anything else that speaks MCP, instead of re-implementing "connect to Salesforce" inside every framework separately.</td>
         </tr>
       </table>
 
-      <div class="code teal wrap" style="max-width:820px;margin-left:auto;margin-right:auto;"><pre><span class="cm"># a minimal subagent — restricted tools, isolated context</span>
+      <div class="code teal wrap" style="max-width:820px;margin-left:auto;margin-right:auto;"><pre><span class="cm"># a minimal subagent: restricted tools, isolated context</span>
 ---
 name: sql-reader
 description: Answers questions by running read-only SQL. Use for data questions.
@@ -825,21 +825,21 @@ tools: Read, Bash(psql --readonly*)
 model: sonnet
 ---
 You are a data analyst. Run only SELECT queries. Never modify data.</pre></div>
-      <p class="wrap" style="max-width:760px;margin-left:auto;margin-right:auto;">Notice the shape of that last example: it's Problem 03 (sandboxing, via the restricted tool list), Problem 05 (orchestration, via being a subagent at all), and a form of Problem 04 (a read-only agent structurally can't cause the class of harm HIL exists to catch) — solved together, in eight lines, because the building blocks compose. That composability is the actual payoff of learning this toolkit instead of hand-rolling each piece.</p>
+      <p class="wrap" style="max-width:760px;margin-left:auto;margin-right:auto;">Notice the shape of that last example: it's Problem 03 (sandboxing, via the restricted tool list), Problem 05 (orchestration, via being a subagent at all), and a form of Problem 04 (a read-only agent structurally can't cause the class of harm HIL exists to catch): solved together, in eight lines, because the building blocks compose. That composability is the actual payoff of learning this toolkit instead of hand-rolling each piece.</p>
     </section>
 
-    <!-- ================= PROBLEM 7 — APPLIED ================= -->
+    <!-- ================= PROBLEM 7 - APPLIED ================= -->
     <section class="section wrap-wide" id="p7">
       <div class="wrap" style="padding:0; max-width:none;">
-      <span class="eyebrow violet">07 — Applied, In This Repo</span>
+      <span class="eyebrow violet">07 &middot; Applied, In This Repo</span>
       <h2>Foundry‑Lite: the same six problems, solved without an agent loop</h2>
-      <p class="lede"><b>Foundry-Lite</b> (this repo — built for EPAM's "Being AI-Native Hackathon 2026," BIA track) is a live ops board: an LLM drafts a semantic layer over uploaded CSVs, a human approves every proposed term, natural-language questions get answered with approved, lineage-traced SQL, and insights become Jira tickets — again gated by approval.</p>
+      <p class="lede"><b>Foundry-Lite</b> (this repo, built for EPAM's "Being AI-Native Hackathon 2026," BIA track) is a live ops board: an LLM drafts a semantic layer over uploaded CSVs, a human approves every proposed term, natural-language questions get answered with approved, lineage-traced SQL, and insights become Jira tickets, again gated by approval.</p>
       <p>The interesting design choice, worth calling out before anything else: <code>backend/app/agents.py</code> explicitly does <b>not</b> use an autonomous tool-calling agent loop (its docstring records that <code>strands-agents</code> tool-calling was probed and rejected in <code>probe_llm.py</code>). Instead it's a deterministic Python pipeline with one structured, schema-locked LLM call per stage via <b>BAML</b>. That's a legitimate sixth answer to "how do I build this": skip the loop, keep the LLM calls single-shot and typed, and get reproducibility the free-form agent-loop approach has to work much harder for.</p>
       </div>
 
       <div class="diagram wrap-wide">
         <svg viewBox="0 0 940 280" role="img" aria-labelledby="d9t">
-          <title id="d9t">Foundry-Lite pipeline: CSV to draft ontology to human approval to approved terms, then ask question through a sandboxed SQL guard to DuckDB, to answer, to draft action, to a second approval gate, to Jira — every stage also publishing to an event bus feeding the frontend.</title>
+          <title id="d9t">Foundry-Lite pipeline: CSV to draft ontology to human approval to approved terms, then ask question through a sandboxed SQL guard to DuckDB, to answer, to draft action, to a second approval gate, to Jira, with every stage also publishing to an event bus that feeds the frontend.</title>
           <rect x="10" y="30" width="110" height="46" rx="6" style="fill:var(--panel-2);stroke:var(--paper-dimmer);stroke-width:2;filter:url(#sketchy)"/>
           <text x="65" y="58" text-anchor="middle" class="dtxt" style="fill:var(--paper);font-size:12px">CSV upload</text>
 
@@ -902,15 +902,15 @@ You are a data analyst. Run only SELECT queries. Never modify data.</pre></div>
         <tr><th>Playbook problem</th><th>How Foundry‑Lite actually solves it</th></tr>
         <tr>
           <td><b>01 · Sessions</b></td>
-          <td>A <code>Workflow</code> object in <code>backend/app/main.py</code> (<code>id</code>, <code>status</code>, <code>run_ids[]</code>) scopes a set of related asks under one <code>_active_workflow_id</code> — the closest analog here to a chat "session": a container, not a raw transcript.</td>
+          <td>A <code>Workflow</code> object in <code>backend/app/main.py</code> (<code>id</code>, <code>status</code>, <code>run_ids[]</code>) scopes a set of related asks under one <code>_active_workflow_id</code>, the closest analog here to a chat "session": a container, not a raw transcript.</td>
         </tr>
         <tr>
           <td><b>02 · Memory / context budget</b></td>
-          <td>No cross-turn conversation memory at all — each stage is one structured completion. Instead, <code>agents.py</code> hard-caps DuckDB sample rows (≤10/table) and truncates cell values when building the schema prompt, to stay inside the model's context window. Durable state lives outside the model entirely: <code>ontology.yaml</code> (merged by ID, via <code>_merge_bucket</code> — never clobbers an already-approved term) and the full <code>events.jsonl</code> log.</td>
+          <td>No cross-turn conversation memory at all: each stage is one structured completion. Instead, <code>agents.py</code> hard-caps DuckDB sample rows (≤10/table) and truncates cell values when building the schema prompt, to stay inside the model's context window. Durable state lives outside the model entirely: <code>ontology.yaml</code> (merged by ID, via <code>_merge_bucket</code>, never clobbers an already-approved term) and the full <code>events.jsonl</code> log.</td>
         </tr>
         <tr>
           <td><b>03 · Sandboxing</b></td>
-          <td>Real, in-repo code — <code>guard_sql()</code> in <code>backend/app/agents.py</code>: a regex allowlist that only accepts a single <code>SELECT</code>/<code>WITH</code> statement and rejects any DDL/DML keyword, and every query additionally runs against <code>duckdb.connect(path, read_only=True)</code>, pre-checked with <code>EXPLAIN</code>. This is "sandbox the output" (Problem 03's lighter variant) rather than "sandbox the process" — and it's a genuinely good minimal pattern to reuse anywhere an LLM emits a query language instead of shell/code.</td>
+          <td>Real, in-repo code. <code>guard_sql()</code> in <code>backend/app/agents.py</code> is a regex allowlist that only accepts a single <code>SELECT</code>/<code>WITH</code> statement and rejects any DDL/DML keyword, and every query additionally runs against <code>duckdb.connect(path, read_only=True)</code>, pre-checked with <code>EXPLAIN</code>. This is "sandbox the output" (Problem 03's lighter variant) rather than "sandbox the process." It's a genuinely good minimal pattern to reuse anywhere an LLM emits a query language instead of shell/code.</td>
         </tr>
         <tr>
           <td><b>04 · Human-in-the-loop</b></td>
@@ -918,17 +918,17 @@ You are a data analyst. Run only SELECT queries. Never modify data.</pre></div>
         </tr>
         <tr>
           <td><b>05 · Multi-agent orchestration</b></td>
-          <td>Three sequential flows — <code>run_ontology_draft</code> → <code>run_ask</code> → <code>run_action</code> — each an async FastAPI background task publishing to a shared <code>EventBus</code>. It's orchestration <em>without</em> agent autonomy: a fixed Python pipeline, not a Graph/Swarm/subagent-dispatch decision made by a model. A legitimate, simpler point on the same spectrum as Problem 05.</td>
+          <td>Three sequential flows: <code>run_ontology_draft</code> → <code>run_ask</code> → <code>run_action</code>, each an async FastAPI background task publishing to a shared <code>EventBus</code>. It's orchestration <em>without</em> agent autonomy: a fixed Python pipeline, not a Graph/Swarm/subagent-dispatch decision made by a model. A legitimate, simpler point on the same spectrum as Problem 05.</td>
         </tr>
         <tr>
           <td><b>06 · Toolkit</b></td>
-          <td>The product itself uses none of hooks/skills/subagents/MCP — every LLM call is a typed BAML function (<code>DraftOntologyMetrics</code>, <code>AskQuestion</code>, <code>DraftActionTicket</code>, <code>InterpretQueryResult</code>) with a <code>TwoRetries</code> backoff policy. BAML is this project's version of "don't hand-roll it": a schema-locked function call is composable and testable the same way a Claude subagent's restricted tool list is.</td>
+          <td>The product itself uses none of hooks/skills/subagents/MCP: every LLM call is a typed BAML function (<code>DraftOntologyMetrics</code>, <code>AskQuestion</code>, <code>DraftActionTicket</code>, <code>InterpretQueryResult</code>) with a <code>TwoRetries</code> backoff policy. BAML is this project's version of "don't hand-roll it": a schema-locked function call is composable and testable the same way a Claude subagent's restricted tool list is.</td>
         </tr>
       </table>
 
       <div class="callout win wrap-wide" style="max-width:960px;margin-left:auto;margin-right:auto;">
         <span class="tag">The actual lesson from this repo</span>
-        <p>You don't need an autonomous agent loop to need agentic <em>infrastructure</em>. Foundry-Lite has no <code>while True: think, act, observe</code> anywhere in it, and it still had to solve context budgeting, output sandboxing, and human approval gates — because those are properties of "an LLM producing consequential output," not of "an LLM in a loop." That's the generalizable takeaway to carry into your next project, agent-loop or not.</p>
+        <p>You don't need an autonomous agent loop to need agentic <em>infrastructure</em>. Foundry-Lite has no <code>while True: think, act, observe</code> anywhere in it, and it still had to solve context budgeting, output sandboxing, and human approval gates, because those are properties of "an LLM producing consequential output," not of "an LLM in a loop." That's the generalizable takeaway to carry into your next project, agent-loop or not.</p>
       </div>
     </section>
 
@@ -937,14 +937,14 @@ You are a data analyst. Run only SELECT queries. Never modify data.</pre></div>
       <div class="wrap" style="padding:0;max-width:none;">
       <span class="eyebrow">Synthesis</span>
       <h2>Which one do I actually reach for?</h2>
-      <p class="lede">Neither SDK is strictly better — they optimize for different starting points. Here's the honest version.</p>
+      <p class="lede">Neither SDK is strictly better: they optimize for different starting points. Here's the honest version.</p>
       </div>
       <div class="decision wrap-wide">
-        <div class="decision-row"><p>You're already deep in AWS — Bedrock models, Lambda, existing IAM/VPC boundaries — and want the agent to feel like just another AWS service.</p><span class="pick amber">Strands</span></div>
+        <div class="decision-row"><p>You're already deep in AWS (Bedrock models, Lambda, existing IAM/VPC boundaries) and want the agent to feel like just another AWS service.</p><span class="pick amber">Strands</span></div>
         <div class="decision-row"><p>You want the fastest path from "idea" to "agent editing files and running commands on my machine," with an interactive dev loop (hooks, skills, subagents) you can iterate on by hand.</p><span class="pick teal">Claude Code</span></div>
-        <div class="decision-row"><p>You're building a product feature — an agent embedded in your own app, not a CLI tool — and want managed session/sandbox infrastructure rather than owning that yourself.</p><span class="pick teal">Claude Agent SDK</span></div>
+        <div class="decision-row"><p>You're building a product feature (an agent embedded in your own app, not a CLI tool) and want managed session/sandbox infrastructure rather than owning that yourself.</p><span class="pick teal">Claude Agent SDK</span></div>
         <div class="decision-row"><p>You need a deterministic multi-step pipeline where the execution order is the whole point (research → analyze → report), not left to a model's judgment.</p><span class="pick amber">Strands Graph</span></div>
-        <div class="decision-row"><p>Your contract needs a precise, reproducible event sequence more than it needs autonomy — like this repo.</p><span class="pick violet">Skip the loop — BAML/typed calls + a hand-orchestrated pipeline</span></div>
+        <div class="decision-row"><p>Your contract needs a precise, reproducible event sequence more than it needs autonomy, like this repo.</p><span class="pick violet">Skip the loop: BAML/typed calls + a hand-orchestrated pipeline</span></div>
         <div class="decision-row"><p>You need to integrate a tool once and have it usable from more than one of the above, or from an agent your team didn't build.</p><span class="pick violet">MCP, either way</span></div>
       </div>
     </section>
@@ -955,7 +955,7 @@ You are a data analyst. Run only SELECT queries. Never modify data.</pre></div>
       <h2>Glossary, in plain terms</h2>
       <dl class="gloss">
         <dt>Context window</dt><dd>The maximum amount of conversation + tool output a model can "see" at once, measured in tokens. Fixed per model, not per your patience.</dd>
-        <dt>Tool / function call</dt><dd>A capability you expose to the model — a name, a description, and an input schema — that it can request be executed on its behalf.</dd>
+        <dt>Tool / function call</dt><dd>A capability you expose to the model (a name, a description, and an input schema) that it can request be executed on its behalf.</dd>
         <dt>Session</dt><dd>A durable, resumable snapshot of an agent's conversation and state, keyed by an ID, so a restart doesn't mean starting over.</dd>
         <dt>Compaction</dt><dd>Automatically shrinking old conversation history (by dropping or summarizing it) so a long-running agent doesn't exceed the context window.</dd>
         <dt>Sandbox</dt><dd>An isolated execution environment (typically a container) where an agent's shell/code tools run, so a bad instruction can't reach your real infrastructure. Guarding the LLM's <em>output</em> (like a SQL allowlist) is a lighter-weight cousin of the same idea.</dd>
@@ -963,14 +963,14 @@ You are a data analyst. Run only SELECT queries. Never modify data.</pre></div>
         <dt>Hook</dt><dd>A script wired to a specific moment in an agent's execution (before a tool runs, after a session starts, …) that can observe, modify, or block what happens next.</dd>
         <dt>Subagent</dt><dd>A specialized agent with its own restricted tools and context window, dispatched to by a main agent for a bounded piece of work.</dd>
         <dt>MCP (Model Context Protocol)</dt><dd>An open, vendor-neutral standard for connecting an agent to external tools and data sources, so the integration is written once and reusable anywhere.</dd>
-        <dt>A2A (Agent2Agent)</dt><dd>An open, vendor-neutral standard for two independently-built agents to communicate — the "MCP, but for talking to other agents" layer.</dd>
+        <dt>A2A (Agent2Agent)</dt><dd>An open, vendor-neutral standard for two independently-built agents to communicate: the "MCP, but for talking to other agents" layer.</dd>
         <dt>Graph / Swarm (Strands)</dt><dd>Two multi-agent patterns: Graph is a fixed, ordered pipeline; Swarm lets agents decide amongst themselves who handles what next.</dd>
-        <dt>BAML (this repo)</dt><dd>A typed-function framework for LLM calls — you declare the input/output schema, BAML generates a client that guarantees the model's output parses into it, or retries.</dd>
+        <dt>BAML (this repo)</dt><dd>A typed-function framework for LLM calls: you declare the input/output schema, BAML generates a client that guarantees the model's output parses into it, or retries.</dd>
       </dl>
     </section>
 
     <footer>
-      <p>SOURCES — strands-agents/sdk-python · strandsagents.com · Claude Code &amp; Agent SDK docs (code.claude.com, platform.claude.com) · backend/app/agents.py &amp; main.py in this repo · verify exact API surfaces against your installed SDK versions before shipping</p>
+      <p>SOURCES: strands-agents/sdk-python · strandsagents.com · Claude Code &amp; Agent SDK docs (code.claude.com, platform.claude.com) · backend/app/agents.py &amp; main.py in this repo · verify exact API surfaces against your installed SDK versions before shipping</p>
     </footer>
 
   </main>
