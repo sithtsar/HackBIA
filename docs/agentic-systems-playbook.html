@@ -157,7 +157,7 @@
   /* ---------- signal trace (hero diagram) ---------- */
   .trace{ margin-top:52px; padding:26px 0 10px; }
   .trace-track{ position:relative; height:2px; background:repeating-linear-gradient(90deg, var(--paper-dimmer) 0 6px, transparent 6px 12px); border-radius:2px; }
-  .trace-events{ position:relative; height:0; }
+  .trace-events{ position:relative; height:92px; }
   .trace-mark{ position:absolute; top:-9px; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; }
   .trace-mark .dot{ width:16px; height:16px; border-radius:50%; border:2px solid var(--ink); box-shadow:0 0 0 1px var(--line); }
   .trace-mark.limit .dot{ background:var(--paper-dimmer); }
@@ -169,7 +169,7 @@
   .trace-mark.compact .lbl{ color:var(--amber); }
   .trace-mark.hil .lbl{ color:var(--alert); }
   .trace-mark.done .lbl{ color:var(--teal); }
-  .trace-caption{ margin-top:44px; font-size:13.5px; color:var(--paper-dimmer); font-family:var(--font-display); }
+  .trace-caption{ margin-top:14px; font-size:13.5px; color:var(--paper-dimmer); font-family:var(--font-display); }
 
   /* ---------- generic prose ---------- */
   .section{ padding:64px 0; border-bottom:1px solid var(--line); }
@@ -267,12 +267,15 @@
 
   .theme-toggle{
     position:fixed; top:16px; right:16px; z-index:60;
-    width:42px; height:42px; border-radius:50%;
+    width:42px; height:42px; border-radius:50%; padding:0;
     background:var(--panel); border:1px solid var(--line); color:var(--paper);
-    font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
     box-shadow:0 2px 10px rgba(0,0,0,0.18);
   }
   .theme-toggle:hover{ background:var(--panel-2); }
+  .theme-toggle .icon-moon{ display:none; }
+  :root[data-theme="light"] .theme-toggle .icon-sun{ display:none; }
+  :root[data-theme="light"] .theme-toggle .icon-moon{ display:block; }
 
   footer{ padding:40px; text-align:center; }
   footer p{ font-family:var(--font-display); font-size:12px; color:var(--paper-dimmer); }
@@ -280,7 +283,14 @@
 </head>
 <body>
 
-<button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to light mode" title="Switch theme">&#9728;&#65039;</button>
+<button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to light mode" title="Switch theme">
+  <svg class="icon-sun" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>
+  </svg>
+  <svg class="icon-moon" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+  </svg>
+</button>
 
 <!-- shared SVG defs: the "sketchy" hand-drawn filter + arrowhead, reused by every diagram below -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -1023,7 +1033,6 @@ You are a data analyst. Run only SELECT queries. Never modify data.</pre></div>
   root.setAttribute('data-theme', current);
   function paint(){
     var next = current === 'light' ? 'dark' : 'light';
-    btn.textContent = current === 'light' ? '\u{1F319}' : '☀️';
     btn.setAttribute('aria-label', 'Switch to ' + next + ' mode');
   }
   paint();
