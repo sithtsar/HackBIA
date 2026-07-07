@@ -41,6 +41,12 @@ class LlmResponseParser:
         __result__ = self.__options.merge_options(baml_options).parse_response(function_name="DraftOntologyMetrics", llm_response=llm_response, mode="request")
         return typing.cast(types.DraftMetricsResponse, __result__)
 
+    def InterpretQueryResult(
+        self, llm_response: str, baml_options: BamlCallOptions = {},
+    ) -> types.InsightInterpretation:
+        __result__ = self.__options.merge_options(baml_options).parse_response(function_name="InterpretQueryResult", llm_response=llm_response, mode="request")
+        return typing.cast(types.InsightInterpretation, __result__)
+
     
 
 class LlmStreamParser:
@@ -66,5 +72,11 @@ class LlmStreamParser:
     ) -> stream_types.DraftMetricsResponse:
         __result__ = self.__options.merge_options(baml_options).parse_response(function_name="DraftOntologyMetrics", llm_response=llm_response, mode="stream")
         return typing.cast(stream_types.DraftMetricsResponse, __result__)
+
+    def InterpretQueryResult(
+        self, llm_response: str, baml_options: BamlCallOptions = {},
+    ) -> stream_types.InsightInterpretation:
+        __result__ = self.__options.merge_options(baml_options).parse_response(function_name="InterpretQueryResult", llm_response=llm_response, mode="stream")
+        return typing.cast(stream_types.InsightInterpretation, __result__)
 
     

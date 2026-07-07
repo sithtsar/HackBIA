@@ -1,4 +1,4 @@
-import type { ActionProposal, BoardState, EventEnvelope, GraphEdge, GraphNode } from "./types";
+import type { ActionProposal, BoardState, EventEnvelope, GraphEdge, GraphNode, Workflow } from "./types";
 
 function upsertBy<T extends { id: string }>(list: T[], item: T): T[] {
   const idx = list.findIndex((existing) => existing.id === item.id);
@@ -28,8 +28,16 @@ function actionNodeStatus(status: ActionProposal["status"]): GraphNode["status"]
   return status === "pushed" ? "approved" : status;
 }
 
+function upsertWorkflow(workflows: Workflow[], wf: Workflow): Workflow[] {
+  const idx = workflows.findIndex((w) => w.id === wf.id);
+  if (idx === -1) return [...workflows, wf];
+  const next = workflows.slice();
+  next[idx] = wf;
+  return next;
+}
+
 /**
- * Pure fold of one SSE envelope into the board's graph/terms/actions/pending.
+ * Pure fold of one SSE envelope into the board's graph/terms/actions/pending/workflows.
  * Node/edge activity glow, the agent feed list, run timing, and toasts are
  * separate (non-board, side-effecting) store concerns handled in store.ts —
  * kept out of here so this stays a plain, unit-testable function.
@@ -59,8 +67,8 @@ export function reduceBoard(board: BoardState, envelope: EventEnvelope): BoardSt
       }
       const meta: Record<string, string> =
         term.kind === "metric"
-          ? { confidence: String(term.confidence) }
-          : { table: term.source_tables[0] ?? "" };
+          ? { confidence: String(term.confidence), sql: term.sql, definition: term.definition }
+          : { table: term.source_tables[0] ?? "", definition: term.definition };
       const node: GraphNode = {
         id: term.id,
         kind: term.kind,
@@ -87,12 +95,13 @@ export function reduceBoard(board: BoardState, envelope: EventEnvelope): BoardSt
     }
 
     case "insight": {
-      const { text, severity, node_ids } = envelope.payload;
-      // Matches backend/app/main.py's _on_event insight node id scheme
-      // (run_id-keyed, falls back to event id) so a later GET /api/state
-      // refetch upserts the same node instead of duplicating it.
+      const { text, severity, node_ids, sql_used } = envelope.payload;
+      // Multi-insight aware id scheme (matches backend: insight_{run_id} or insight_{run_id}_{seq})
       const id = `insight_${envelope.run_id || envelope.id}`;
-      const node: GraphNode = { id, kind: "insight", label: text, status: "neutral", meta: { severity } };
+      const meta: Record<string, string> = { severity };
+      if (sql_used) meta.sql_used = sql_used;
+      if (envelope.workflow_id) meta.workflow_id = envelope.workflow_id;
+      const node: GraphNode = { id, kind: "insight", label: text, status: "neutral", meta };
       const nodes = upsertBy(board.graph.nodes, node);
       const knownIds = new Set(nodes.map((n) => n.id));
       // Mirrors backend's e_<evidence_id>_<insight_id> produces edges so
@@ -109,12 +118,14 @@ export function reduceBoard(board: BoardState, envelope: EventEnvelope): BoardSt
     case "action_proposed": {
       const action = envelope.payload.action;
       const actions = upsertBy(board.actions, action);
+      const meta: Record<string, string> = { kind: action.kind };
+      if (envelope.workflow_id) meta.workflow_id = envelope.workflow_id;
       const node: GraphNode = {
         id: action.id,
         kind: "action",
         label: action.title,
         status: actionNodeStatus(action.status),
-        meta: { kind: action.kind },
+        meta,
       };
       const nodes = upsertBy(board.graph.nodes, node);
       // Mirrors backend's e_produces_<action.id> edge (insight -> action).
@@ -155,6 +166,35 @@ export function reduceBoard(board: BoardState, envelope: EventEnvelope): BoardSt
       );
       const nodes = setNodeStatus(board.graph.nodes, action_id, "approved");
       return { ...board, actions, graph: { ...board.graph, nodes } };
+    }
+
+    case "workflow_created": {
+      const { workflow_id, title } = envelope.payload;
+      const wf: Workflow = {
+        id: workflow_id,
+        title,
+        status: "active",
+        created_at: envelope.ts,
+        run_ids: [],
+      };
+      const workflows = upsertWorkflow(board.workflows, wf);
+      return { ...board, workflows, active_workflow_id: workflow_id };
+    }
+
+    case "workflow_completed": {
+      const { workflow_id } = envelope.payload;
+      const workflows = board.workflows.map((w) =>
+        w.id === workflow_id ? { ...w, status: "completed" as const } : w,
+      );
+      return { ...board, workflows };
+    }
+
+    case "workflow_renamed": {
+      const { workflow_id, title } = envelope.payload;
+      const workflows = board.workflows.map((w) =>
+        w.id === workflow_id ? { ...w, title } : w,
+      );
+      return { ...board, workflows };
     }
 
     // run_started, status, node_touched, edge_traversed, sql_generated,

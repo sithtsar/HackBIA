@@ -68,7 +68,12 @@ def build_graph(
         nodes.append({"id": f"src_{table}", "kind": "source", "label": table, "status": "neutral", "meta": {"table": table}})
 
     for o in onto.get("objects", []):
-        nodes.append({"id": o["id"], "kind": "object", "label": o["name"], "status": "approved", "meta": {"table": o["table"]}})
+        definition = f"{o['name']} record sourced from {o['table']}."
+        nodes.append({
+            "id": o["id"], "kind": "object", "label": o["name"],
+            "status": "approved",
+            "meta": {"table": o["table"], "definition": definition},
+        })
         edges.append({"id": f"e_feeds_{o['table']}", "source": f"src_{o['table']}", "target": o["id"], "kind": "feeds"})
 
     table_to_object = _table_to_object(onto)
@@ -88,7 +93,11 @@ def build_graph(
             "kind": "metric",
             "label": m["name"],
             "status": m.get("status", "proposed"),
-            "meta": {"confidence": str(m.get("confidence", ""))},
+            "meta": {
+                "confidence": str(m.get("confidence", "")),
+                "sql": m.get("sql", ""),
+                "definition": m.get("definition", ""),
+            },
         })
         for table in m.get("source_tables", []):
             obj_id = table_to_object.get(table)

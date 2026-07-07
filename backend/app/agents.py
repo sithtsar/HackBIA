@@ -15,9 +15,9 @@ against a BAML/Pydantic class by BAML's Schema-Aligned Parsing (handles code
 fences, trailing commas, minor coercion) with the Cerebras client's
 `TwoRetries` policy retrying transient/parse failures — no unvalidated LLM
 dict ever reaches an event or ontology.yaml. Each flow calls exactly one thin
-module-level seam (`llm_draft_metrics` / `llm_ask` / `llm_draft_action`)
-wrapping the matching `b.*` call, so tests can monkeypatch that seam with a
-typed fake instead of hitting the network.
+module-level seam (`llm_draft_metrics` / `llm_ask` / `llm_draft_action` /
+`llm_interpret_insight`) wrapping the matching `b.*` call, so tests can
+monkeypatch that seam with a typed fake instead of hitting the network.
 
 Every flow is an async entrypoint (FastAPI background task). Blocking work
 (duckdb, LLM HTTP) runs in a worker thread via asyncio.to_thread so the event
@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +38,7 @@ import duckdb
 from dotenv import load_dotenv
 
 from baml_client.sync_client import b
-from baml_client.types import ActionDraftResponse, AskResponse, DraftMetricsResponse
+from baml_client.types import ActionDraftResponse, AskResponse, DraftMetricsResponse, InsightInterpretation
 
 from . import ontology as onto_mod
 from .events import EventBus, OntologyTerm
@@ -64,6 +65,10 @@ def llm_ask(question: str, approved_terms_json: str, schema_and_samples: str, re
 
 def llm_draft_action(insight_text: str) -> ActionDraftResponse:
     return b.DraftActionTicket(insight_text)
+
+
+def llm_interpret_insight(question: str, sql: str, result_json: str, terms_used_json: str) -> InsightInterpretation:
+    return b.InterpretQueryResult(question, sql, result_json, terms_used_json)
 
 
 # ---------------------------------------------------------------------------
@@ -433,31 +438,15 @@ def _emit_lineage(bus: EventBus, run_id: str, onto: dict[str, Any], term_ids: li
     return touched_objects
 
 
-def _ticket_anomaly() -> tuple[int, int]:
-    """(last14, prior14) ticket counts anchored on the latest ticket date."""
-    con = duckdb.connect(str(DB_PATH), read_only=True)
+async def run_ask(bus: EventBus, run_id: str, question: str, workflow_id: str = "") -> None:
     try:
-        row = con.execute(
-            "WITH d AS (SELECT max(created_date) AS today FROM tickets) "
-            "SELECT "
-            "(SELECT count(*) FROM tickets, d WHERE created_date > today - INTERVAL 14 DAY), "
-            "(SELECT count(*) FROM tickets, d WHERE created_date <= today - INTERVAL 14 DAY "
-            " AND created_date > today - INTERVAL 28 DAY) "
-        ).fetchone()
-        return int(row[0]), int(row[1])
-    finally:
-        con.close()
-
-
-async def run_ask(bus: EventBus, run_id: str, question: str) -> None:
-    try:
-        bus.publish("run_started", {"kind": "ask", "input": question}, run_id)
+        bus.publish("run_started", {"kind": "ask", "input": question}, run_id, workflow_id=workflow_id)
 
         onto = onto_mod.load_ontology()
         approved = [t for t in onto_mod.terms_from_ontology(onto) if t.status == "approved"]
         schema = await asyncio.to_thread(introspect, 5)
 
-        bus.publish("status", {"message": "Resolving question against approved ontology terms"}, run_id)
+        bus.publish("status", {"message": "Resolving question against approved ontology terms"}, run_id, workflow_id=workflow_id)
         terms_blob = json.dumps([
             {"id": t.id, "kind": t.kind, "name": t.name, "definition": t.definition, "sql": t.sql}
             for t in approved
@@ -485,40 +474,46 @@ async def run_ask(bus: EventBus, run_id: str, question: str) -> None:
                 break
             last_err = err
         else:
-            bus.publish("error", {"message": f"Could not produce valid SQL: {last_err}"}, run_id)
-            bus.publish("run_completed", {"summary": "ask failed: invalid SQL"}, run_id)
+            bus.publish("error", {"message": f"Could not produce valid SQL: {last_err}"}, run_id, workflow_id=workflow_id)
+            bus.publish("run_completed", {"summary": "ask failed: invalid SQL"}, run_id, workflow_id=workflow_id)
             return
 
         # Lineage trace along real graph ids, then the query + result.
         touched_objects = _emit_lineage(bus, run_id, onto, terms_used)
-        bus.publish("status", {"message": "Generating DuckDB SQL"}, run_id)
-        bus.publish("sql_generated", {"sql": sql, "terms_used": terms_used}, run_id)
-        bus.publish("status", {"message": "Executing query against foundry.duckdb"}, run_id)
+        bus.publish("status", {"message": "Generating DuckDB SQL"}, run_id, workflow_id=workflow_id)
+        bus.publish("sql_generated", {"sql": sql, "terms_used": terms_used}, run_id, workflow_id=workflow_id)
+        bus.publish("status", {"message": "Executing query against foundry.duckdb"}, run_id, workflow_id=workflow_id)
         result = await asyncio.to_thread(_execute, sql)
-        bus.publish("sql_result", result, run_id)
+        bus.publish("sql_result", result, run_id, workflow_id=workflow_id)
 
-        # Threshold rule (pure Python, no LLM): ticket spike -> critical insight.
-        relates_tickets = "ticket" in question.lower() or any(
-            "tickets" in t.source_tables for t in approved if t.id in terms_used
+        # Generic insight interpretation: LLM evaluates actual query results
+        # (seeded ticket anomaly is discovered organically, not by hardcoded check).
+        terms_used_json = json.dumps(terms_used)
+        result_json = json.dumps({"columns": result["columns"], "rows": result["rows"], "row_count": result["row_count"]})
+        interpretation = await asyncio.to_thread(
+            llm_interpret_insight, question, sql, result_json, terms_used_json,
         )
-        if relates_tickets:
-            last14, prior14 = await asyncio.to_thread(_ticket_anomaly)
-            if prior14 > 0 and last14 >= 2 * prior14:
-                ratio = last14 / prior14
-                node_ids = touched_objects or ["obj_ticket"]
-                insight_node_id = f"insight_{run_id}"
-                text = (
-                    f"Support tickets in the last 14 days ({last14}) are {ratio:.1f}x the "
-                    f"prior 14-day period ({prior14}) — an emerging SLA-impacting spike."
-                )
-                bus.publish("insight", {"text": text, "severity": "critical", "node_ids": node_ids}, run_id)
-                bus.publish("node_touched", {"node_id": insight_node_id}, run_id)
-                await run_action(bus, run_id, text, insight_node_id)
 
-        bus.publish("run_completed", {"summary": "Answered with grounded SQL"}, run_id)
+        if interpretation.has_insight:
+            node_ids = touched_objects or []
+            insight_node_id = f"insight_{run_id}"
+            bus.publish(
+                "insight",
+                {
+                    "text": interpretation.text,
+                    "severity": interpretation.severity,
+                    "node_ids": node_ids,
+                    "sql_used": sql,
+                },
+                run_id,
+                workflow_id=workflow_id,
+            )
+            bus.publish("node_touched", {"node_id": insight_node_id}, run_id, workflow_id=workflow_id)
+
+        bus.publish("run_completed", {"summary": "Answered with grounded SQL"}, run_id, workflow_id=workflow_id)
     except Exception as e:  # noqa: BLE001
-        bus.publish("error", {"message": f"{type(e).__name__}: {e}"}, run_id)
-        bus.publish("run_completed", {"summary": "ask failed"}, run_id)
+        bus.publish("error", {"message": f"{type(e).__name__}: {e}"}, run_id, workflow_id=workflow_id)
+        bus.publish("run_completed", {"summary": "ask failed"}, run_id, workflow_id=workflow_id)
 
 
 # ===========================================================================
@@ -528,27 +523,23 @@ async def run_ask(bus: EventBus, run_id: str, question: str) -> None:
 # is the seam tests monkeypatch.
 
 
-async def run_action(bus: EventBus, run_id: str, insight_text: str, insight_node_id: str) -> None:
+async def run_action(bus: EventBus, run_id: str, insight_text: str, insight_node_id: str, workflow_id: str = "") -> None:
     try:
-        bus.publish("status", {"message": "Insight severity=critical → drafting escalation"}, run_id)
+        bus.publish("status", {"message": "Drafting action from insight"}, run_id, workflow_id=workflow_id)
         resp = await asyncio.to_thread(llm_draft_action, insight_text)
         title = resp.title.strip()
         body = resp.body.strip()
         if "BI Analyst on-call" not in body:
             body += "\n\nSuggested owner: BI Analyst on-call"
 
-        # Reuse Task 1's in-memory action registry (main._actions) for the id.
-        # Lazy import avoids a circular import (main imports agents for routes).
-        from . import main as main_mod  # noqa: PLC0415
-
-        action_id = f"act_{len(main_mod._actions) + 1:04d}"
+        action_id = f"act_{uuid.uuid4().hex[:8]}"
         action = {
             "id": action_id, "kind": "jira", "title": title, "body": body,
             "insight_ref": insight_node_id, "status": "proposed",
         }
         # The bus listener in main.py registers the action into _actions on this event.
-        bus.publish("action_proposed", {"action": action}, run_id)
-        bus.publish("node_touched", {"node_id": action_id}, run_id)
-        bus.publish("approval_required", {"subject_kind": "action", "subject_id": action_id}, run_id)
+        bus.publish("action_proposed", {"action": action}, run_id, workflow_id=workflow_id)
+        bus.publish("node_touched", {"node_id": action_id}, run_id, workflow_id=workflow_id)
+        bus.publish("approval_required", {"subject_kind": "action", "subject_id": action_id}, run_id, workflow_id=workflow_id)
     except Exception as e:  # noqa: BLE001
-        bus.publish("error", {"message": f"{type(e).__name__}: {e}"}, run_id)
+        bus.publish("error", {"message": f"{type(e).__name__}: {e}"}, run_id, workflow_id=workflow_id)

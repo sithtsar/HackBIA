@@ -136,6 +136,20 @@ class BamlSyncClient:
                 "schema_and_samples": schema_and_samples,"inferred_joins_json": inferred_joins_json,
             })
             return typing.cast(types.DraftMetricsResponse, __result__.cast_to(types, types, stream_types, False, __runtime__))
+    def InterpretQueryResult(self, question: str,sql: str,result_json: str,terms_used_json: str,
+        baml_options: BamlCallOptions = {},
+    ) -> types.InsightInterpretation:
+        # Check if on_tick is provided
+        if 'on_tick' in baml_options:
+            __stream__ = self.stream.InterpretQueryResult(question=question,sql=sql,result_json=result_json,terms_used_json=terms_used_json,
+                baml_options=baml_options)
+            return __stream__.get_final_response()
+        else:
+            # Original non-streaming code
+            __result__ = self.__options.merge_options(baml_options).call_function_sync(function_name="InterpretQueryResult", args={
+                "question": question,"sql": sql,"result_json": result_json,"terms_used_json": terms_used_json,
+            })
+            return typing.cast(types.InsightInterpretation, __result__.cast_to(types, types, stream_types, False, __runtime__))
     
 
 
@@ -181,6 +195,18 @@ class BamlStreamClient:
           lambda x: typing.cast(types.DraftMetricsResponse, x.cast_to(types, types, stream_types, False, __runtime__)),
           __ctx__,
         )
+    def InterpretQueryResult(self, question: str,sql: str,result_json: str,terms_used_json: str,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.BamlSyncStream[stream_types.InsightInterpretation, types.InsightInterpretation]:
+        __ctx__, __result__ = self.__options.merge_options(baml_options).create_sync_stream(function_name="InterpretQueryResult", args={
+            "question": question,"sql": sql,"result_json": result_json,"terms_used_json": terms_used_json,
+        })
+        return baml_py.BamlSyncStream[stream_types.InsightInterpretation, types.InsightInterpretation](
+          __result__,
+          lambda x: typing.cast(stream_types.InsightInterpretation, x.cast_to(types, types, stream_types, True, __runtime__)),
+          lambda x: typing.cast(types.InsightInterpretation, x.cast_to(types, types, stream_types, False, __runtime__)),
+          __ctx__,
+        )
     
 
 class BamlHttpRequestClient:
@@ -210,6 +236,13 @@ class BamlHttpRequestClient:
             "schema_and_samples": schema_and_samples,"inferred_joins_json": inferred_joins_json,
         }, mode="request")
         return __result__
+    def InterpretQueryResult(self, question: str,sql: str,result_json: str,terms_used_json: str,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.baml_py.HTTPRequest:
+        __result__ = self.__options.merge_options(baml_options).create_http_request_sync(function_name="InterpretQueryResult", args={
+            "question": question,"sql": sql,"result_json": result_json,"terms_used_json": terms_used_json,
+        }, mode="request")
+        return __result__
     
 
 class BamlHttpStreamRequestClient:
@@ -237,6 +270,13 @@ class BamlHttpStreamRequestClient:
     ) -> baml_py.baml_py.HTTPRequest:
         __result__ = self.__options.merge_options(baml_options).create_http_request_sync(function_name="DraftOntologyMetrics", args={
             "schema_and_samples": schema_and_samples,"inferred_joins_json": inferred_joins_json,
+        }, mode="stream")
+        return __result__
+    def InterpretQueryResult(self, question: str,sql: str,result_json: str,terms_used_json: str,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.baml_py.HTTPRequest:
+        __result__ = self.__options.merge_options(baml_options).create_http_request_sync(function_name="InterpretQueryResult", args={
+            "question": question,"sql": sql,"result_json": result_json,"terms_used_json": terms_used_json,
         }, mode="stream")
         return __result__
     

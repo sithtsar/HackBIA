@@ -14,6 +14,7 @@ import re
 import shutil
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from dotenv import load_dotenv
@@ -47,18 +48,47 @@ _produces_edges: dict[str, dict[str, Any]] = {}
 _term_nodes: dict[str, dict[str, Any]] = {}
 _term_edges: dict[str, dict[str, Any]] = {}
 
+# Workflow-scoped storage
+_workflows: dict[str, dict[str, Any]] = {}
+_insight_seq: dict[str, int] = {}  # run_id -> sequence counter for multi-insight
+_active_workflow_id: str | None = None
+_insight_sql_used: dict[str, str] = {}  # insight_node_id -> sql used to produce it
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _create_workflow(title: str) -> str:
+    wf_id = f"wf_{uuid.uuid4().hex[:6]}"
+    global _active_workflow_id
+    _workflows[wf_id] = {
+        "id": wf_id, "title": title,
+        "status": "active", "created_at": _now_iso(), "run_ids": [],
+    }
+    _active_workflow_id = wf_id
+    bus.publish("workflow_created", {"workflow_id": wf_id, "title": title})
+    return wf_id
+
 
 def _on_event(env: Envelope) -> None:
     if env.type == "insight":
-        # ponytail: node id keyed by run_id (stable across replay, which
-        # reassigns fresh envelope ids) — assumes <=1 insight per run, true
-        # for this hackathon's agents; revisit if a run can emit several.
-        node_id = f"insight_{env.run_id or env.id}"
+        # Multi-insight support: sequential ids per run
+        seq = _insight_seq.get(env.run_id, 0) + 1
+        _insight_seq[env.run_id] = seq
+        node_id = f"insight_{env.run_id}_{seq}" if seq > 1 else f"insight_{env.run_id}"
+        sql_used = env.payload.get("sql_used", "")
+        meta: dict[str, str] = {"severity": env.payload["severity"]}
+        if sql_used:
+            meta["sql_used"] = sql_used
+            _insight_sql_used[node_id] = sql_used
+        if env.workflow_id:
+            meta["workflow_id"] = env.workflow_id
         _insight_nodes[node_id] = {
             "id": node_id, "kind": "insight", "label": env.payload["text"],
-            "status": "neutral", "meta": {"severity": env.payload["severity"]},
+            "status": "neutral", "meta": meta,
         }
-        extra = list(_insight_nodes.values()) + list(_action_nodes.values())
+        extra = list(_term_nodes.values()) + list(_insight_nodes.values()) + list(_action_nodes.values())
         graph_node_ids = {n["id"] for n in onto_mod.build_graph(onto_mod.load_ontology(), extra_nodes=extra)["nodes"]}
         for evidence_id in env.payload["node_ids"]:
             if evidence_id not in graph_node_ids:
@@ -71,16 +101,35 @@ def _on_event(env: Envelope) -> None:
             }
     elif env.type == "ontology_term_proposed":
         term = env.payload["term"]
-        table_to_object = {o["table"]: o["id"] for o in onto_mod.load_ontology().get("objects", [])}
-        if term["kind"] == "metric":
+        # Build table→object mapping from both ontology.yaml AND event-sourced object terms
+        onto_objects = onto_mod.load_ontology().get("objects", [])
+        table_to_object: dict[str, str] = {o["table"]: o["id"] for o in onto_objects}
+        # Include event-sourced proposed objects
+        for t in _term_nodes.values():
+            if t["kind"] == "object":
+                table = t["meta"].get("table", "")
+                if table:
+                    table_to_object.setdefault(table, t["id"])
+        if term["kind"] == "object":
+            _term_nodes[term["id"]] = {
+                "id": term["id"], "kind": "object", "label": term["name"],
+                "status": term["status"],
+                "meta": {"table": term["source_tables"][0] if term.get("source_tables") else ""},
+            }
+        elif term["kind"] == "metric":
+            meta: dict[str, str] = {"confidence": str(term["confidence"])}
+            if term.get("sql"):
+                meta["sql"] = term["sql"]
+            if term.get("definition"):
+                meta["definition"] = term["definition"]
             _term_nodes[term["id"]] = {
                 "id": term["id"], "kind": "metric", "label": term["name"],
-                "status": term["status"], "meta": {"confidence": str(term["confidence"])},
+                "status": term["status"], "meta": meta,
             }
             for table in term["source_tables"]:
                 obj_id = table_to_object.get(table)
                 if obj_id is None:
-                    continue  # skip: no matching object node for this table (yet)
+                    continue
                 edge_id = f"e_derives_{term['id']}_{table}"
                 _term_edges[edge_id] = {"id": edge_id, "source": obj_id, "target": term["id"], "kind": "derives"}
         elif term["kind"] == "join" and len(term["source_tables"]) >= 2:
@@ -91,9 +140,12 @@ def _on_event(env: Envelope) -> None:
     elif env.type == "action_proposed":
         a = env.payload["action"]
         _actions[a["id"]] = a
+        meta: dict[str, str] = {"kind": a["kind"]}
+        if env.workflow_id:
+            meta["workflow_id"] = env.workflow_id
         _action_nodes[a["id"]] = {
             "id": a["id"], "kind": "action", "label": a["title"],
-            "status": "proposed", "meta": {"kind": a["kind"]},
+            "status": "proposed", "meta": meta,
         }
         edge_id = f"e_produces_{a['id']}"
         _produces_edges[edge_id] = {"id": edge_id, "source": a["insight_ref"], "target": a["id"], "kind": "produces"}
@@ -111,6 +163,16 @@ def _on_event(env: Envelope) -> None:
         if aid in _actions:
             _actions[aid]["status"] = "pushed"
             _action_nodes[aid]["status"] = "approved"  # GraphNode.status has no "pushed" value
+    elif env.type == "workflow_created":
+        wid = env.payload["workflow_id"]
+        if wid not in _workflows:
+            _workflows[wid] = {
+                "id": wid,
+                "title": env.payload["title"],
+                "status": "active",
+                "created_at": env.ts,
+                "run_ids": [],
+            }
 
 
 bus.add_listener(_on_event)
@@ -138,13 +200,23 @@ class ReplayBody(BaseModel):
 @app.get("/api/state")
 async def get_state() -> dict[str, Any]:
     onto = onto_mod.load_ontology()
-    # A term proposed via the event stream that has SINCE landed in
-    # ontology.yaml (draft flow's _persist, or /api/ontology/join's inline
-    # save) is now covered by build_graph's own onto-derived nodes/edges —
-    # drop it from the event-sourced extras here so ids never duplicate.
+    existing_object_ids = {o["id"] for o in onto.get("objects", [])}
     existing_metric_ids = {m["id"] for m in onto.get("metrics", [])}
     existing_join_ids = {j["id"] for j in onto.get("joins", [])}
-    term_nodes = [n for n in _term_nodes.values() if n["id"] not in existing_metric_ids]
+    all_existing = existing_object_ids | existing_metric_ids
+
+    # Merge event-sourced object terms into onto so YAML-based metrics/joins
+    # can resolve table→object for derives/joins edges.
+    event_object_ids = set()
+    for n in _term_nodes.values():
+        if n["kind"] == "object" and n["id"] not in existing_object_ids:
+            table = n["meta"].get("table", "")
+            onto.setdefault("objects", []).append({
+                "id": n["id"], "name": n["label"], "table": table,
+            })
+            event_object_ids.add(n["id"])
+
+    term_nodes = [n for n in _term_nodes.values() if n["id"] not in all_existing and n["id"] not in event_object_ids]
     term_edges = [
         e for e in _term_edges.values()
         if not (e["kind"] == "join" and e["id"] in existing_join_ids)
@@ -153,12 +225,29 @@ async def get_state() -> dict[str, Any]:
     extra_nodes = term_nodes + list(_insight_nodes.values()) + list(_action_nodes.values())
     extra_edges = term_edges + list(_produces_edges.values())
     graph = onto_mod.build_graph(onto, extra_nodes=extra_nodes, extra_edges=extra_edges)
-    terms = onto_mod.terms_from_ontology(onto)
+    base_terms = onto_mod.terms_from_ontology(onto)
+    # Append event-sourced terms not yet in ontology.yaml (proposed objects, joins, metrics)
+    term_ids = {t.id for t in base_terms}
+    for n in _term_nodes.values():
+        if n["id"] not in term_ids:
+            base_terms.append(OntologyTerm(
+                id=n["id"],
+                kind=n["kind"],  # type: ignore
+                name=n["label"],
+                definition=n["meta"].get("definition", ""),
+                sql=n["meta"].get("sql", ""),
+                source_tables=[],
+                confidence=float(n["meta"].get("confidence", "0")) if n["meta"].get("confidence") else 0.0,
+                status=n["status"],
+            ))
+            term_ids.add(n["id"])
     return {
         "graph": graph,
-        "terms": [t.model_dump() for t in terms],
+        "terms": [t.model_dump() for t in base_terms],
         "actions": list(_actions.values()),
         "pending": list(_pending.values()),
+        "workflows": list(_workflows.values()),
+        "active_workflow_id": _active_workflow_id,
     }
 
 
@@ -194,8 +283,11 @@ async def ontology_draft() -> dict[str, str]:
 
 @app.post("/api/ask")
 async def ask(body: AskBody) -> dict[str, str]:
+    """Scoped to active workflow. Creates one if none exists."""
     run_id = _new_run_id()
-    asyncio.create_task(agents.run_ask(bus, run_id, body.question))
+    wf_id = _active_workflow_id or _create_workflow(body.question)
+    _workflows[wf_id]["run_ids"].append(run_id)
+    asyncio.create_task(agents.run_ask(bus, run_id, body.question, workflow_id=wf_id))
     return {"run_id": run_id}
 
 
@@ -334,6 +426,82 @@ async def ontology_metric(body: MetricBody) -> dict[str, str]:
     return {"term_id": mid}
 
 
+class WorkflowCreateBody(BaseModel):
+    title: str
+
+
+class WorkflowPatchBody(BaseModel):
+    status: Literal["active", "completed", "failed"] | None = None
+    title: str | None = None
+
+
+class ActionDraftBody(BaseModel):
+    insight_text: str
+    insight_node_id: str
+
+
+@app.post("/api/workflows")
+async def create_workflow(body: WorkflowCreateBody) -> dict[str, str]:
+    return {"workflow_id": _create_workflow(body.title)}
+
+
+@app.get("/api/workflows")
+async def list_workflows() -> dict[str, Any]:
+    return {"workflows": list(_workflows.values())}
+
+
+@app.get("/api/workflows/{wf_id}")
+async def get_workflow(wf_id: str) -> dict[str, Any]:
+    wf = _workflows.get(wf_id)
+    if wf is None:
+        raise HTTPException(404, f"workflow {wf_id} not found")
+    return {"workflow": wf}
+
+
+@app.post("/api/workflows/{wf_id}/ask")
+async def workflow_ask(wf_id: str, body: AskBody) -> dict[str, str]:
+    wf = _workflows.get(wf_id)
+    if wf is None:
+        raise HTTPException(404, f"workflow {wf_id} not found")
+    run_id = _new_run_id()
+    wf["run_ids"].append(run_id)
+    global _active_workflow_id
+    _active_workflow_id = wf_id
+    asyncio.create_task(agents.run_ask(bus, run_id, body.question, workflow_id=wf_id))
+    return {"run_id": run_id}
+
+
+@app.patch("/api/workflows/{wf_id}")
+async def patch_workflow(wf_id: str, body: WorkflowPatchBody) -> dict[str, bool]:
+    wf = _workflows.get(wf_id)
+    if wf is None:
+        raise HTTPException(404, f"workflow {wf_id} not found")
+    if body.status:
+        wf["status"] = body.status
+        if body.status == "completed":
+            bus.publish("workflow_completed", {"workflow_id": wf_id})
+    if body.title:
+        wf["title"] = body.title
+        bus.publish("workflow_renamed", {"workflow_id": wf_id, "title": body.title})
+    global _active_workflow_id
+    if wf["status"] == "active":
+        _active_workflow_id = wf_id
+    return {"ok": True}
+
+
+@app.post("/api/workflows/{wf_id}/action")
+async def workflow_draft_action(wf_id: str, body: ActionDraftBody) -> dict[str, str]:
+    """User-initiated action draft from an insight, scoped to a workflow."""
+    wf = _workflows.get(wf_id)
+    if wf is None:
+        raise HTTPException(404, f"workflow {wf_id} not found")
+    run_id = _new_run_id()
+    wf["run_ids"].append(run_id)
+    bus.publish("run_started", {"kind": "action", "input": body.insight_text}, run_id, workflow_id=wf_id)
+    asyncio.create_task(agents.run_action(bus, run_id, body.insight_text, body.insight_node_id, workflow_id=wf_id))
+    return {"run_id": run_id}
+
+
 @app.post("/api/data/upload")
 async def upload_data(file: UploadFile = File(...), table: str | None = Form(None)) -> dict[str, Any]:
     content = await file.read()
@@ -361,6 +529,11 @@ async def _restore_baseline() -> None:
     _produces_edges.clear()
     _term_nodes.clear()
     _term_edges.clear()
+    _workflows.clear()
+    _insight_seq.clear()
+    _insight_sql_used.clear()
+    global _active_workflow_id
+    _active_workflow_id = None
 
     bus._jsonl_path.write_text("")
 

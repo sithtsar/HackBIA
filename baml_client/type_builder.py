@@ -20,7 +20,7 @@ from .globals import DO_NOT_USE_DIRECTLY_UNLESS_YOU_KNOW_WHAT_YOURE_DOING_RUNTIM
 class TypeBuilder(type_builder.TypeBuilder):
     def __init__(self):
         super().__init__(classes=set(
-          ["ActionDraftResponse","AskResponse","DraftMetric","DraftMetricsResponse",]
+          ["ActionDraftResponse","AskResponse","DraftMetric","DraftMetricsResponse","InsightInterpretation",]
         ), enums=set(
           []
         ), runtime=DO_NOT_USE_DIRECTLY_UNLESS_YOU_KNOW_WHAT_YOURE_DOING_RUNTIME)
@@ -31,7 +31,7 @@ class TypeBuilder(type_builder.TypeBuilder):
 
 
     # #########################################################################
-    # Generated classes 4
+    # Generated classes 5
     # #########################################################################
 
     @property
@@ -50,6 +50,10 @@ class TypeBuilder(type_builder.TypeBuilder):
     def DraftMetricsResponse(self) -> "DraftMetricsResponseViewer":
         return DraftMetricsResponseViewer(self)
 
+    @property
+    def InsightInterpretation(self) -> "InsightInterpretationViewer":
+        return InsightInterpretationViewer(self)
+
 
 
 # #########################################################################
@@ -58,7 +62,7 @@ class TypeBuilder(type_builder.TypeBuilder):
 
 
 # #########################################################################
-# Generated classes 4
+# Generated classes 5
 # #########################################################################
 
 class ActionDraftResponseAst:
@@ -245,6 +249,61 @@ class DraftMetricsResponseProperties:
     @property
     def metrics(self) -> type_builder.ClassPropertyViewer:
         return type_builder.ClassPropertyViewer(self.__bldr.property("metrics"))
+    
+    
+
+
+class InsightInterpretationAst:
+    def __init__(self, tb: type_builder.TypeBuilder):
+        _tb = tb._tb # type: ignore (we know how to use this private attribute)
+        self._bldr = _tb.class_("InsightInterpretation")
+        self._properties: typing.Set[str] = set([  "has_insight",  "text",  "severity",  "warrants_action",  "reasoning_one_line",  ])
+        self._props = InsightInterpretationProperties(self._bldr, self._properties)
+
+    def type(self) -> baml_py.FieldType:
+        return self._bldr.field()
+
+    @property
+    def props(self) -> "InsightInterpretationProperties":
+        return self._props
+
+
+class InsightInterpretationViewer(InsightInterpretationAst):
+    def __init__(self, tb: type_builder.TypeBuilder):
+        super().__init__(tb)
+
+    
+    def list_properties(self) -> typing.List[typing.Tuple[str, type_builder.ClassPropertyViewer]]:
+        return [(name, type_builder.ClassPropertyViewer(self._bldr.property(name))) for name in self._properties]
+    
+
+
+class InsightInterpretationProperties:
+    def __init__(self, bldr: baml_py.ClassBuilder, properties: typing.Set[str]):
+        self.__bldr = bldr
+        self.__properties = properties # type: ignore (we know how to use this private attribute) # noqa: F821
+
+    
+    
+    @property
+    def has_insight(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("has_insight"))
+    
+    @property
+    def text(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("text"))
+    
+    @property
+    def severity(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("severity"))
+    
+    @property
+    def warrants_action(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("warrants_action"))
+    
+    @property
+    def reasoning_one_line(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("reasoning_one_line"))
     
     
 

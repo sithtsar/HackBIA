@@ -28,5 +28,8 @@ type_map = {
     "types.DraftMetricsResponse": types.DraftMetricsResponse,
     "stream_types.DraftMetricsResponse": stream_types.DraftMetricsResponse,
 
+    "types.InsightInterpretation": types.InsightInterpretation,
+    "stream_types.InsightInterpretation": stream_types.InsightInterpretation,
+
 
 }

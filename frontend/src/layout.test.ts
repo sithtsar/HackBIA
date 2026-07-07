@@ -1,79 +1,63 @@
 import { describe, expect, test } from "bun:test";
-import { columnX, layoutGraph } from "./layout";
+import { layoutGraph } from "./layout";
 import type { GraphEdge, GraphNode } from "./types";
 
 function node(id: string, kind: GraphNode["kind"]): GraphNode {
   return { id, kind, label: id, status: "neutral", meta: {} };
 }
 
-describe("layoutGraph (fixed kind-columns)", () => {
-  test("every node lands in its kind's column, connected or not", () => {
+describe("layoutGraph (dagre DAG layout)", () => {
+  test("all nodes get x/y positions", () => {
     const nodes: GraphNode[] = [
       node("src_orders", "source"),
       node("obj_order", "object"),
-      node("m_orphan", "metric"), // no edges at all — the old dagre floating-node case
+      node("m_active", "metric"),
       node("insight_x", "insight"),
       node("act_1", "action"),
     ];
     const edges: GraphEdge[] = [
-      { id: "e_feeds_orders", source: "src_orders", target: "obj_order", kind: "feeds" },
+      { id: "e1", source: "src_orders", target: "obj_order", kind: "feeds" },
+      { id: "e2", source: "obj_order", target: "m_active", kind: "derives" },
+      { id: "e3", source: "m_active", target: "insight_x", kind: "produces" },
+      { id: "e4", source: "insight_x", target: "act_1", kind: "produces" },
     ];
 
     const positioned = layoutGraph(nodes, edges);
+    expect(positioned.length).toBe(5);
     const byId = new Map(positioned.map((n) => [n.id, n]));
 
-    for (const n of nodes) {
-      expect(byId.get(n.id)?.x).toBe(columnX(n.kind));
+    // All nodes have finite x/y
+    for (const n of positioned) {
+      expect(typeof n.x).toBe("number");
+      expect(typeof n.y).toBe("number");
+      expect(Number.isFinite(n.x)).toBe(true);
+      expect(Number.isFinite(n.y)).toBe(true);
     }
-    // Columns are strictly ordered left -> right.
-    expect(columnX("source")).toBeLessThan(columnX("object"));
-    expect(columnX("object")).toBeLessThan(columnX("metric"));
-    expect(columnX("metric")).toBeLessThan(columnX("insight"));
-    expect(columnX("insight")).toBeLessThan(columnX("action"));
+
+    // source is left of object, which is left of metric (LR rankdir)
+    const src = byId.get("src_orders")!;
+    const obj = byId.get("obj_order")!;
+    const met = byId.get("m_active")!;
+    expect(src.x).toBeLessThan(obj.x);
+    expect(obj.x).toBeLessThan(met.x);
   });
 
-  test("within a column, nodes follow the barycenter of their left neighbors", () => {
+  test("unconnected nodes still get positioned", () => {
     const nodes: GraphNode[] = [
-      node("src_a", "source"),
-      node("src_b", "source"),
-      // Input order deliberately inverted relative to their sources:
-      node("obj_b", "object"),
       node("obj_a", "object"),
+      node("m_orphan", "metric"),
     ];
-    const edges: GraphEdge[] = [
-      { id: "e1", source: "src_a", target: "obj_a", kind: "feeds" },
-      { id: "e2", source: "src_b", target: "obj_b", kind: "feeds" },
-    ];
+    const edges: GraphEdge[] = [];
 
-    const byId = new Map(layoutGraph(nodes, edges).map((n) => [n.id, n]));
-    const objA = byId.get("obj_a");
-    const objB = byId.get("obj_b");
-    const srcA = byId.get("src_a");
-    const srcB = byId.get("src_b");
-
-    expect(srcA && srcB && srcA.y < srcB.y).toBe(true);
-    // obj_a follows src_a to the top row despite coming later in input order.
-    expect(objA && objB && objA.y < objB.y).toBe(true);
+    const positioned = layoutGraph(nodes, edges);
+    expect(positioned.length).toBe(2);
+    for (const n of positioned) {
+      expect(typeof n.x).toBe("number");
+      expect(typeof n.y).toBe("number");
+    }
   });
 
-  test("unconnected nodes stack below connected ones in stable input order", () => {
-    const nodes: GraphNode[] = [
-      node("obj_a", "object"),
-      node("m_orphan_1", "metric"),
-      node("m_orphan_2", "metric"),
-      node("m_linked", "metric"),
-    ];
-    const edges: GraphEdge[] = [
-      { id: "e1", source: "obj_a", target: "m_linked", kind: "derives" }, // object -> metric, with data flow
-    ];
-
-    const byId = new Map(layoutGraph(nodes, edges).map((n) => [n.id, n]));
-    const linked = byId.get("m_linked");
-    const o1 = byId.get("m_orphan_1");
-    const o2 = byId.get("m_orphan_2");
-
-    expect(linked && o1 && linked.y < o1.y).toBe(true);
-    expect(o1 && o2 && o1.y < o2.y).toBe(true); // stable order among orphans
-    expect(o1?.x).toBe(columnX("metric"));
+  test("empty nodes returns empty", () => {
+    expect(layoutGraph([], [])).toEqual([]);
   });
 });

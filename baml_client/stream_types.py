@@ -23,7 +23,7 @@ class StreamState(BaseModel, typing.Generic[StreamStateValueT]):
     value: StreamStateValueT
     state: typing_extensions.Literal["Pending", "Incomplete", "Complete"]
 # #########################################################################
-# Generated classes (4)
+# Generated classes (5)
 # #########################################################################
 
 class ActionDraftResponse(BaseModel):
@@ -45,6 +45,13 @@ class DraftMetric(BaseModel):
 
 class DraftMetricsResponse(BaseModel):
     metrics: typing.List["DraftMetric"] = Field(description='3-5 useful business metrics')
+
+class InsightInterpretation(BaseModel):
+    has_insight: typing.Optional[bool] = None
+    text: typing.Optional[str] = Field(default=None, description='one-sentence insight description; empty if has_insight is false')
+    severity: typing.Optional[str] = Field(default=None, description='\'info\', \'warning\', or \'critical\'; empty if has_insight is false')
+    warrants_action: typing.Optional[bool] = None
+    reasoning_one_line: typing.Optional[str] = None
 
 # #########################################################################
 # Generated type aliases (0)

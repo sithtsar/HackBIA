@@ -22,10 +22,37 @@
     --alert-dim: rgba(224,122,114,0.14);
     --violet:#9C9FE8;
     --violet-dim: rgba(156,159,232,0.13);
+    --code-fg:#DCE6E3;
+    --code-kw:#7FB3E8;
+    --code-str:#C9D97A;
     --font-display: ui-monospace, "Cascadia Code", "JetBrains Mono", "IBM Plex Mono", "Source Code Pro", Menlo, Consolas, "Liberation Mono", monospace;
     --font-body: "Iowan Old Style", "Palatino Linotype", Palatino, Charter, Georgia, "Times New Roman", serif;
     --font-hand: "Segoe Print", "Bradley Hand", "Chalkboard SE", "Comic Sans MS", cursive;
     --rail-w: 272px;
+  }
+  /* warm, comforting light theme — same hue family as the dark mode's
+     paper/amber tones, just flipped, not a generic cold-white swap */
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --ink:#F7F1E4; --panel:#EEE4CF; --panel-2:#E5D8BC;
+      --line: rgba(43,34,20,0.16); --line-soft: rgba(43,34,20,0.08);
+      --paper:#2B2318; --paper-dim: rgba(43,34,24,0.74); --paper-dimmer: rgba(43,34,24,0.50);
+      --amber:#A85A17; --amber-dim: rgba(168,90,23,0.14);
+      --teal:#1C7A6B; --teal-dim: rgba(28,122,107,0.14);
+      --alert:#A8443B; --alert-dim: rgba(168,68,59,0.14);
+      --violet:#5457A6; --violet-dim: rgba(84,87,166,0.14);
+      --code-fg:#2B2318; --code-kw:#1F5A8F; --code-str:#5C7A1E;
+    }
+  }
+  :root[data-theme="light"]{
+    --ink:#F7F1E4; --panel:#EEE4CF; --panel-2:#E5D8BC;
+    --line: rgba(43,34,20,0.16); --line-soft: rgba(43,34,20,0.08);
+    --paper:#2B2318; --paper-dim: rgba(43,34,24,0.74); --paper-dimmer: rgba(43,34,24,0.50);
+    --amber:#A85A17; --amber-dim: rgba(168,90,23,0.14);
+    --teal:#1C7A6B; --teal-dim: rgba(28,122,107,0.14);
+    --alert:#A8443B; --alert-dim: rgba(168,68,59,0.14);
+    --violet:#5457A6; --violet-dim: rgba(84,87,166,0.14);
+    --code-fg:#2B2318; --code-kw:#1F5A8F; --code-str:#5C7A1E;
   }
   *{ box-sizing:border-box; }
   html{ scroll-behavior:smooth; }
@@ -173,12 +200,12 @@
     background:var(--panel); border:1px solid var(--line); border-radius:8px;
     padding:16px 18px; overflow-x:auto; margin:14px 0 18px;
   }
-  .code pre{ margin:0; font-size:13.3px; line-height:1.6; color:#DCE6E3; white-space:pre; }
+  .code pre{ margin:0; font-size:13.3px; line-height:1.6; color:var(--code-fg); white-space:pre; }
   .code.amber{ border-left:3px solid var(--amber); }
   .code.teal{ border-left:3px solid var(--teal); }
   .code.violet{ border-left:3px solid var(--violet); }
-  .code .kw{ color:#7FB3E8; }
-  .code .str{ color:#C9D97A; }
+  .code .kw{ color:var(--code-kw); }
+  .code .str{ color:var(--code-str); }
   .code .cm{ color:var(--paper-dimmer); font-style:italic; }
 
   /* ---------- diagrams (excalidraw-inspired) ---------- */
@@ -238,11 +265,22 @@
   .gloss dt{ font-family:var(--font-display); font-size:14px; color:var(--paper); margin-top:16px; }
   .gloss dd{ margin:4px 0 0; color:var(--paper-dim); font-size:14.5px; }
 
+  .theme-toggle{
+    position:fixed; top:16px; right:16px; z-index:60;
+    width:42px; height:42px; border-radius:50%;
+    background:var(--panel); border:1px solid var(--line); color:var(--paper);
+    font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 2px 10px rgba(0,0,0,0.18);
+  }
+  .theme-toggle:hover{ background:var(--panel-2); }
+
   footer{ padding:40px; text-align:center; }
   footer p{ font-family:var(--font-display); font-size:12px; color:var(--paper-dimmer); }
 </style>
 </head>
 <body>
+
+<button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to light mode" title="Switch theme">&#9728;&#65039;</button>
 
 <!-- shared SVG defs: the "sketchy" hand-drawn filter + arrowhead, reused by every diagram below -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -976,5 +1014,26 @@ You are a data analyst. Run only SELECT queries. Never modify data.</pre></div>
   </main>
 </div>
 
+<script>
+(function(){
+  var root = document.documentElement;
+  var btn = document.getElementById('theme-toggle');
+  var saved = localStorage.getItem('playbook-theme');
+  var current = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  root.setAttribute('data-theme', current);
+  function paint(){
+    var next = current === 'light' ? 'dark' : 'light';
+    btn.textContent = current === 'light' ? '\u{1F319}' : '☀️';
+    btn.setAttribute('aria-label', 'Switch to ' + next + ' mode');
+  }
+  paint();
+  btn.addEventListener('click', function(){
+    current = current === 'light' ? 'dark' : 'light';
+    root.setAttribute('data-theme', current);
+    localStorage.setItem('playbook-theme', current);
+    paint();
+  });
+})();
+</script>
 </body>
 </html>

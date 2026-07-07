@@ -18,6 +18,8 @@ const EMPTY_STATE: BoardState = {
   terms: [],
   actions: [],
   pending: [],
+  workflows: [],
+  active_workflow_id: null,
 };
 
 const ACTIVITY_DECAY_MS = 2000;

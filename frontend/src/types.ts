@@ -2,6 +2,14 @@
 // Do not invent fields. Do not rename types. UI is a pure function of
 // (GET /api/state, SSE /api/events) — these are the only shapes it knows.
 
+export type Workflow = {
+  id: string; // "wf_0001"
+  title: string;
+  status: "active" | "completed" | "failed";
+  created_at: string;
+  run_ids: string[];
+};
+
 export type OntologyTerm = {
   id: string; // "m_active_customer", "join_orders_customers", "obj_order"
   kind: "object" | "join" | "metric";
@@ -27,7 +35,7 @@ export type GraphNode = {
   kind: "source" | "object" | "metric" | "insight" | "action";
   label: string;
   status: "proposed" | "approved" | "rejected" | "neutral";
-  meta: Record<string, string>;
+  meta: Record<string, string>; // keys: confidence, sql, definition, workflow_id, sql_used, severity, kind, table
 };
 
 export type GraphEdge = {
@@ -56,6 +64,8 @@ export type BoardState = {
   terms: OntologyTerm[];
   actions: ActionProposal[];
   pending: PendingItem[];
+  workflows: Workflow[];
+  active_workflow_id: string | null;
 };
 
 // Per-type payload shapes, copied verbatim from contracts.md's
@@ -75,6 +85,7 @@ export type InsightPayload = {
   text: string;
   severity: "info" | "warning" | "critical";
   node_ids: string[];
+  sql_used: string;
 };
 export type ActionProposedPayload = { action: ActionProposal };
 export type ApprovalRequiredPayload = {
@@ -89,8 +100,11 @@ export type ApprovalResolvedPayload = {
 export type ActionPushedPayload = { action_id: string; external_url: string };
 export type RunCompletedPayload = { summary: string };
 export type ErrorPayload = { message: string };
+export type WorkflowCreatedPayload = { workflow_id: string; title: string };
+export type WorkflowRenamedPayload = { workflow_id: string; title: string };
+export type WorkflowCompletedPayload = { workflow_id: string };
 
-type EnvelopeBase = { id: string; ts: string; run_id: string };
+type EnvelopeBase = { id: string; ts: string; run_id: string; workflow_id: string };
 
 // SSE `data:` payload: one JSON envelope per contracts.md's "Event envelope"
 // section, discriminated on `type` so the reducer (reducer.ts) gets a
@@ -109,6 +123,9 @@ export type EventEnvelope =
   | (EnvelopeBase & { type: "approval_resolved"; payload: ApprovalResolvedPayload })
   | (EnvelopeBase & { type: "action_pushed"; payload: ActionPushedPayload })
   | (EnvelopeBase & { type: "run_completed"; payload: RunCompletedPayload })
-  | (EnvelopeBase & { type: "error"; payload: ErrorPayload });
+  | (EnvelopeBase & { type: "error"; payload: ErrorPayload })
+  | (EnvelopeBase & { type: "workflow_created"; payload: WorkflowCreatedPayload })
+  | (EnvelopeBase & { type: "workflow_renamed"; payload: WorkflowRenamedPayload })
+  | (EnvelopeBase & { type: "workflow_completed"; payload: WorkflowCompletedPayload });
 
 export type EventType = EventEnvelope["type"];

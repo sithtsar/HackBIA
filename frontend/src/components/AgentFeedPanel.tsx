@@ -21,6 +21,9 @@ const TYPE_COLOR: Record<EventType, string> = {
   approval_resolved: "var(--color-committed-green)",
   insight: "var(--color-pending-amber)",
   error: ERROR_RED,
+  workflow_created: "var(--color-agent-blue)",
+  workflow_renamed: "var(--color-agent-blue)",
+  workflow_completed: "var(--color-committed-green)",
 };
 
 function colorFor(e: EventEnvelope): string {
@@ -74,6 +77,12 @@ function summarize(e: EventEnvelope): string {
       return `run completed: ${e.payload.summary}`;
     case "error":
       return e.payload.message;
+    case "workflow_created":
+      return `workflow created: ${e.payload.title} (${e.payload.workflow_id})`;
+    case "workflow_renamed":
+      return `workflow renamed: ${e.payload.title}`;
+    case "workflow_completed":
+      return `workflow completed: ${e.payload.workflow_id}`;
   }
 }
 

@@ -5,7 +5,6 @@ import {
   BackgroundVariant,
   Controls,
   Panel,
-  ViewportPortal,
   useNodesState,
   useReactFlow,
   useStoreApi,
@@ -17,7 +16,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { ActionProposal, GraphEdge, GraphNode, OntologyTerm } from "../types";
-import { layoutGraph, columnX, COLUMN_ORDER, NODE_WIDTH, NODE_HEIGHT } from "../layout";
+import { layoutGraph, NODE_WIDTH, NODE_HEIGHT } from "../layout";
 import { upstream } from "../lineage";
 import { postOntologyJoin } from "../api";
 import { useStore } from "../store";
@@ -26,7 +25,6 @@ import { FoundryNode, type FoundryFlowNode, type FoundryNodeData } from "./Found
 const nodeTypes = { foundry: FoundryNode };
 
 const DIMMED = 0.35;
-const HEADER_Y = -72;
 
 type CanvasProps = {
   nodes: GraphNode[];
@@ -38,7 +36,8 @@ type CanvasProps = {
 };
 
 /** One-line card description, joined client-side (no backend field):
- * metric/object node id == OntologyTerm id, action id == ActionProposal id. */
+ * metric/object node id == OntologyTerm id, action id == ActionProposal id.
+ * For metrics, prefers meta.sql for inline provenance display. */
 function describeNode(
   node: GraphNode,
   termDefById: ReadonlyMap<string, string>,
@@ -48,38 +47,14 @@ function describeNode(
     case "source":
       return node.meta.table ?? "";
     case "object":
+      return node.meta.definition ?? termDefById.get(node.id) ?? "";
     case "metric":
-      return termDefById.get(node.id) ?? "";
+      return node.meta.definition ?? termDefById.get(node.id) ?? "";
     case "insight":
       return node.meta.severity ?? "";
     case "action":
       return actionsById.get(node.id)?.body.split("\n")[0] ?? "";
   }
-}
-
-/** Faint small-caps column labels — orientation hints only, not lanes.
- * They pan/zoom with the graph (rendered inside the viewport transform). */
-function ColumnHeaders() {
-  return (
-    <ViewportPortal>
-      {COLUMN_ORDER.map((kind) => (
-        <div
-          key={kind}
-          className="column-header text-center font-mono text-[10px] uppercase tracking-[0.25em] text-text-secondary"
-          style={{
-            position: "absolute",
-            transform: `translate(${columnX(kind) - NODE_WIDTH / 2}px, ${HEADER_Y}px)`,
-            width: NODE_WIDTH,
-            opacity: 0.4,
-            pointerEvents: "none",
-            userSelect: "none",
-          }}
-        >
-          {kind}
-        </div>
-      ))}
-    </ViewportPortal>
-  );
 }
 
 function LegendDot({ color }: { color: string }) {
@@ -219,10 +194,7 @@ export function Canvas({
   // or rebuild the array — moving one node re-renders only that node.
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState<FoundryFlowNode>([]);
 
-  // Reconcile board -> flow nodes. Columns are INITIAL PLACEMENT ONLY:
-  // layoutGraph runs solely when the node-id set grows, and its positions
-  // are applied only to the new ids — existing nodes (dragged or not) keep
-  // whatever position they currently have. Card data refreshes in place.
+  // Reconcile board -> flow nodes. Layout runs on new ids only via dagre.
   useEffect(() => {
     const termDefById = new Map(terms.map((t: OntologyTerm) => [t.id, t.definition]));
     const actionsById = new Map(actions.map((a) => [a.id, a]));
@@ -233,7 +205,7 @@ export function Canvas({
         ? new Map(
             layoutGraph(nodes, edges).map((n) => [
               n.id,
-              { x: n.x - NODE_WIDTH / 2, y: n.y - NODE_HEIGHT / 2 },
+              { x: n.x, y: n.y },
             ]),
           )
         : null;
@@ -266,7 +238,7 @@ export function Canvas({
         return {
           id: node.id,
           type: "foundry",
-          position: autoPos?.get(node.id) ?? { x: columnX(node.kind), y: 0 },
+          position: autoPos?.get(node.id) ?? { x: 0, y: 0 },
           connectable: node.kind === "object", // drag-to-connect joins are object->object only
           data: card,
         };
@@ -373,7 +345,6 @@ export function Canvas({
     >
       <Background variant={BackgroundVariant.Dots} color="#2B3444" gap={20} size={1} />
       <Controls showInteractive={false} position="top-left" className="foundry-controls" />
-      <ColumnHeaders />
       <Legend />
       <NewNodesChip flowNodes={flowNodes} />
       <FitOnEvent />

@@ -1,4 +1,4 @@
-// Foundry-Lite's three LLM call sites (backend/app/agents.py). Prompts are
+// Foundry-Lite's LLM call sites (backend/app/agents.py). Prompts are
 // ported verbatim from the raw-JSON versions that used to live in agents.py's
 // _DRAFT_SYSTEM/_ASK_SYSTEM/_ACTION_SYSTEM strings; the old "Return STRICT
 // JSON only: {...}" shape spec is now expressed as class fields (with
@@ -93,6 +93,36 @@ function DraftActionTicket(insight_text: string) -> ActionDraftResponse {
 
     {{ _.role("user") }}
     Insight: {{ insight_text }}
+
+    {{ ctx.output_format }}
+  "#
+}
+
+// --- Flow 4: insight interpretation (query result -> insight) ----------
+
+class InsightInterpretation {
+  has_insight bool
+  text string @description("one-sentence insight description; empty if has_insight is false")
+  severity string @description("'info', 'warning', or 'critical'; empty if has_insight is false")
+  warrants_action bool
+  reasoning_one_line string
+}
+
+function InterpretQueryResult(question: string, sql: string, result_json: string, terms_used_json: string) -> InsightInterpretation {
+  client Cerebras
+  prompt #"
+    {{ _.role("system") }}
+    You are a BI insight interpreter. Given a user question, the SQL used to
+    answer it, and the query result, determine if there is an actionable
+    insight. Return has_insight=true only when the data reveals a significant
+    pattern, anomaly, or opportunity — not for routine queries. When you find
+    an insight, set the severity and warrants_action accordingly.
+
+    {{ _.role("user") }}
+    Question: {{ question }}
+    SQL: {{ sql }}
+    Results (JSON): {{ result_json }}
+    Terms used: {{ terms_used_json }}
 
     {{ ctx.output_format }}
   "#

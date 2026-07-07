@@ -8,6 +8,8 @@ import {
   postDemoReset,
   postOntologyDraft,
   postReplay,
+  postCreateWorkflow,
+  patchWorkflowStatus,
 } from "../api";
 import { CommandPalette, type PaletteActions } from "./CommandPalette";
 
@@ -49,6 +51,129 @@ function useElapsedLabel(run: RunTiming): string {
   return formatElapsed(end - run.startedAt);
 }
 
+/** Dropdown to switch between workflows and create new ones. */
+function WorkflowSwitcher() {
+  const { state, refetch } = useStore();
+  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+
+  const activeWf = state.workflows.find((w) => w.id === state.active_workflow_id);
+
+  const switchWorkflow = async (id: string): Promise<void> => {
+    await patchWorkflowStatus(id, "active");
+    await refetch();
+    setOpen(false);
+  };
+
+  const createNew = async (): Promise<void> => {
+    if (creating) return;
+    setCreating(true);
+    try {
+      await postCreateWorkflow("New investigation");
+      await refetch();
+    } catch {
+      // toast handled by parent
+    } finally {
+      setCreating(false);
+      setOpen(false);
+    }
+  };
+
+  const startRename = (id: string, title: string): void => {
+    setRenamingId(id);
+    setRenameValue(title);
+  };
+
+  const commitRename = async (id: string): Promise<void> => {
+    if (!renameValue.trim()) return;
+    await patchWorkflowStatus(id, "active", renameValue.trim());
+    setRenamingId(null);
+    await refetch();
+  };
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 rounded border border-hairline px-2 py-0.5 font-mono text-[11px] text-text-secondary hover:border-agent-blue hover:text-text-primary"
+      >
+        <span className="max-w-[120px] truncate">{activeWf?.title ?? "No workflow"}</span>
+        <span className="text-[9px]">▼</span>
+      </button>
+      {open ? (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full z-50 mt-1 w-64 rounded border border-hairline bg-panel shadow-lg">
+            <div className="border-b border-hairline px-2 py-1.5 font-mono text-[10px] uppercase tracking-wider text-text-secondary">
+              Investigations
+            </div>
+            <ul className="max-h-48 overflow-y-auto py-1">
+              {state.workflows.map((wf) => (
+                <li key={wf.id}>
+                  {renamingId === wf.id ? (
+                    <form
+                      onSubmit={(e) => { e.preventDefault(); void commitRename(wf.id); }}
+                      className="flex items-center gap-1 px-2 py-1"
+                    >
+                      <input
+                        autoFocus
+                        className="min-w-0 flex-1 rounded border border-hairline bg-surface px-1.5 py-0.5 font-mono text-[11px] outline-none focus:border-agent-blue"
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onBlur={() => void commitRename(wf.id)}
+                      />
+                    </form>
+                  ) : (
+                    <div className="flex items-center">
+                      <button
+                        type="button"
+                        onClick={() => void switchWorkflow(wf.id)}
+                        className={`flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5 text-left font-mono text-[11px] ${
+                          wf.id === state.active_workflow_id
+                            ? "bg-agent-blue/10 text-agent-blue"
+                            : "text-text-secondary hover:text-text-primary"
+                        }`}
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                            wf.status === "active" ? "bg-committed-green" : "bg-text-secondary"
+                          }`}
+                        />
+                        <span className="truncate">{wf.title}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => startRename(wf.id, wf.title)}
+                        className="mr-1 shrink-0 px-1 text-[10px] text-text-secondary hover:text-agent-blue"
+                        title="Rename"
+                      >
+                        ✎
+                      </button>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <div className="border-t border-hairline px-2 py-1.5">
+              <button
+                type="button"
+                onClick={() => void createNew()}
+                disabled={creating}
+                className="w-full rounded border border-dashed border-hairline px-2 py-1 text-[11px] text-text-secondary hover:border-agent-blue hover:text-agent-blue disabled:opacity-50"
+              >
+                + New investigation
+              </button>
+            </div>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 export function Topbar() {
   const { connectionStatus, run, applyEvent, refetch, pushToast } = useStore();
   const runActive = run.startedAt !== null && run.endedAt === null;
@@ -67,6 +192,7 @@ export function Topbar() {
       id: `local_${Date.now()}_${localErrorSeq++}`,
       ts: new Date().toISOString(),
       run_id: "",
+      workflow_id: "",
       type: "error",
       payload: { message: `${fallbackMessage}: ${message}` },
     });
@@ -107,7 +233,7 @@ export function Topbar() {
     setActionError(null);
     try {
       const result = await postDataUpload(file);
-      await refetch(); // new source node lands in the SOURCE column ("N new" chip if off-screen)
+      await refetch(); // new source node lands on canvas ("N new" chip if off-screen)
       pushToast(
         `table ${result.table} added — ${result.rows} rows, ${result.columns.length} columns`,
         "success",
@@ -185,6 +311,7 @@ export function Topbar() {
           title={`SSE: ${connectionStatus}`}
         />
         <span className="font-mono text-[13px] tracking-wide text-text-primary">FOUNDRY-LITE</span>
+        <WorkflowSwitcher />
       </div>
 
       <div className="flex flex-1 flex-col items-center">

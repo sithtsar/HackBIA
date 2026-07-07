@@ -13,7 +13,7 @@ def _lines():
 
 def test_every_line_parses_as_envelope():
     lines = _lines()
-    assert len(lines) == 40
+    assert len(lines) == 43
     envelopes = [Envelope.model_validate(line) for line in lines]
     assert all(e.id for e in envelopes)
 
@@ -40,21 +40,18 @@ def test_tells_the_three_act_story():
     assert run_kinds == {"draft", "ask", "action"}
 
     proposed = [line for line in lines if line["type"] == "ontology_term_proposed"]
+    objects = [p for p in proposed if p["payload"]["term"]["kind"] == "object"]
     joins = [p for p in proposed if p["payload"]["term"]["kind"] == "join"]
     metrics = [p for p in proposed if p["payload"]["term"]["kind"] == "metric"]
+    assert len(objects) == 3
     assert len(joins) == 2
-    assert len(metrics) == 3
+    assert len(metrics) == 1
 
     approvals = [line for line in lines if line["type"] == "approval_required"]
     term_approvals = [a for a in approvals if a["payload"]["subject_kind"] == "ontology_term"]
     action_approvals = [a for a in approvals if a["payload"]["subject_kind"] == "action"]
-    assert len(term_approvals) == 2
+    assert len(term_approvals) == 4
     assert len(action_approvals) == 1
-    # both flagged terms have confidence < 0.9 per the drafter's threshold rule
-    flagged_ids = {a["payload"]["subject_id"] for a in term_approvals}
-    for p in proposed:
-        if p["payload"]["term"]["id"] in flagged_ids:
-            assert p["payload"]["term"]["confidence"] < 0.9
 
     insights = [line for line in lines if line["type"] == "insight"]
     assert len(insights) == 1

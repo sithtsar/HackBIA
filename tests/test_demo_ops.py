@@ -127,7 +127,7 @@ def test_replay_resets_state_before_reemitting(_isolate):
     r, n = asyncio.run(run())
 
     assert r.status_code == 200
-    assert n == 40  # every demo_events.jsonl line still re-emitted after the reset
+    assert n == 43  # every demo_events.jsonl line re-emitted after the reset
 
     # ontology.yaml was restored to baseline BEFORE replay (no stray "products"
     # source stacked on top, no id collisions from a prior run).
@@ -135,13 +135,13 @@ def test_replay_resets_state_before_reemitting(_isolate):
     assert [s["table"] for s in onto["sources"]] == ["customers", "orders", "tickets"]
 
     # stale pre-replay demo state is gone; only what replay itself produced remains
-    # (the demo narrative's own action + its 3 not-yet-persisted proposed metrics).
+    # (the demo narrative's own action + proposed terms).
     assert "act_x" not in main._actions
     assert "act_x" not in main._pending
     assert "m_stale" not in main._term_nodes
     assert "e_derives_m_stale_orders" not in main._term_edges
     assert len(main._actions) == 1
-    assert set(main._term_nodes) == {"m_active_customer", "m_avg_order_value", "m_ticket_sla_breach_rate"}
+    assert set(main._term_nodes) == {"obj_customer", "obj_order", "obj_ticket", "m_active_customer"}
 
 
 def test_ontology_export_returns_yaml_file(_isolate):

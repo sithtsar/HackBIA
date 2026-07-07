@@ -36,11 +36,11 @@ Click **Draft ontology**. Narrate while the board animates: source nodes light u
 **Act 2 — grounded answers with provenance (~60s).**
 Click the chip `How many active customers do we have?`
 The trace lights the actual path: orders.csv → Order → Active Customer. Show the SQL in the feed + which definition it used: *"No silent guessing between six definitions of 'active customer' — it used THE approved one, and shows its work."*
-Then the chip `What's happening with support tickets in the last two weeks?`
-Result fires the critical insight (≈3.5x ticket spike, SLA breach rate 4x) — insight node appears red.
+Then `What's happening with support tickets in the last two weeks?`
+Result fires the critical insight (≈3.5x ticket spike, SLA breach rate 4x) from LLM interpretation of query results — no hardcoded ticket threshold. Insight node appears red with SQL visible on the card.
 
 **Act 3 — insight becomes action, human approves (~50s).**
-The agent drafts a Jira ticket from the insight — action node amber, approval card appears. **Click the action node**: the detail panel opens with the drafted ticket and the upstream lineage re-illuminates — tickets.csv → Support Ticket → insight → this action. *"Every number in this ticket is traceable to a CSV row on this board."* Read the ticket aloud, click **Approve** → `action_pushed` → green. *"Closed loop: raw CSV to approved Jira ticket, every hop visible, human at both gates."*
+Click **Draft action** in the detail panel of the insight node. The agent drafts a Jira ticket — action node amber, approval card appears. *"The insight was discovered by the LLM evaluating actual query results, and the action is only drafted when the user asks — no silent auto-escalation."* Click the action node: the detail panel opens with the drafted ticket and the upstream lineage re-illuminates — tickets.csv → Support Ticket → insight → this action. *"Every number in this ticket is traceable to a CSV row on this board, and the SQL that produced the insight is visible on the insight card."* Read the ticket aloud, click **Approve** → `action_pushed` → green. *"Closed loop: raw CSV to approved Jira ticket, every hop visible, human at both gates."*
 Timer freezes: **AGENT ~2:40 vs MANUAL 45:00.**
 
 ## Insurance
@@ -60,7 +60,9 @@ Cerebras down / wifi dead / anything weird → click **Replay**: `demo_events.js
 ## Q&A ammo
 
 - "How is this different from a chatbot?" → Ontology grounding (approved definitions, not schema guessing) + provenance trace + action write-back with human gates. Chatbots answer; this operates.
-- "What about hallucinated SQL?" → SELECT-only guard, EXPLAIN validation with retry, and the SQL + definitions used are shown, not hidden. Wrong answers are inspectable.
+- "What about hallucinated SQL?" → SELECT-only guard, EXPLAIN validation with retry, and the SQL + definitions used are shown on the node cards, not hidden. Wrong answers are inspectable.
+- "How is insight different from before?" → The LLM interprets actual query results against the user's question, not a hardcoded ticket-spike rule. Any question can yield an insight if the data supports it.
 - "Production path?" → Ontology YAML exports to a dbt semantic layer (the Export button is the seam); DuckDB swaps for Databricks SQL; adapters already isolate Jira/Slack. (Roadmap — deliberately not built in 48h.)
 - "Why Cerebras?" → gemma-4-31b at extreme inference speed = the board animates in real time, no awkward silence.
 - "What if I upload garbage?" → 20MB cap, CSV sniffing, sanitized table names, and nothing enters a query until a human approves the terms that reference it.
+- "Multiple investigations?" → The workflow switcher in the topbar lets you create separate investigation threads, each with its own ask/insight/action chain, sharing the ontology.

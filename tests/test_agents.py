@@ -1,14 +1,21 @@
 """Task 2 agent tests. LLM network calls are excluded from the default run
 (marked @pytest.mark.llm); everything here mocks the llm_draft_metrics/
-llm_ask/llm_draft_action seams (thin wrappers around the generated BAML
-`b.*` functions — see backend/app/agents.py's module docstring)."""
+llm_ask/llm_draft_action/llm_interpret_insight seams (thin wrappers around
+the generated BAML `b.*` functions — see backend/app/agents.py's module
+docstring)."""
 import asyncio
 
 import pytest
 
 from backend.app import agents, seed
 from backend.app.events import EventBus
-from baml_client.types import ActionDraftResponse, AskResponse, DraftMetric, DraftMetricsResponse
+from baml_client.types import (
+    ActionDraftResponse,
+    AskResponse,
+    DraftMetric,
+    DraftMetricsResponse,
+    InsightInterpretation,
+)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -105,7 +112,20 @@ def _collect_run(coro_factory):
     return events
 
 
+def _patch_ontology(monkeypatch, extra_objects=None):
+    """Monkeypatch onto_mod.load_ontology to return ontology with extra objects."""
+    import yaml
+    from backend.app.ontology import ONTOLOGY_PATH
+    orig = yaml.safe_load(ONTOLOGY_PATH.read_text())
+    if extra_objects:
+        orig.setdefault("objects", []).extend(extra_objects)
+    monkeypatch.setattr(agents.onto_mod, "load_ontology", lambda: orig)
+
+
 def test_run_ask_event_sequence_mocked_llm(monkeypatch):
+    _patch_ontology(monkeypatch, [
+        {"id": "obj_customer", "name": "Customer", "table": "customers"},
+    ])
     # Canned planner output: a valid, guard-passing, EXPLAIN-able query against
     # an approved object term. Customers question -> no ticket insight.
     def fake_llm_ask(question, approved_terms_json, schema_and_samples, retry_note):
@@ -115,7 +135,14 @@ def test_run_ask_event_sequence_mocked_llm(monkeypatch):
             reasoning_one_line="count all customers",
         )
 
+    def fake_llm_interpret(question, sql, result_json, terms_used_json):
+        return InsightInterpretation(
+            has_insight=False, text="", severity="info",
+            warrants_action=False, reasoning_one_line="routine count",
+        )
+
     monkeypatch.setattr(agents, "llm_ask", fake_llm_ask)
+    monkeypatch.setattr(agents, "llm_interpret_insight", fake_llm_interpret)
 
     types = _collect_run(lambda bus: agents.run_ask(bus, "run_test", "How many customers do we have?"))
 
@@ -125,12 +152,17 @@ def test_run_ask_event_sequence_mocked_llm(monkeypatch):
     assert "node_touched" in types
     assert types.index("sql_generated") < types.index("sql_result")
     assert types.index("sql_result") < types.index("run_completed")
-    # non-ticket question -> no insight/action fired
+    # routine query -> no insight fired
     assert "insight" not in types
     assert "action_proposed" not in types
 
 
-def test_run_ask_ticket_question_fires_insight_and_action(monkeypatch):
+def test_run_ask_with_insight_from_llm_interpretation(monkeypatch):
+    _patch_ontology(monkeypatch, [
+        {"id": "obj_ticket", "name": "Support Ticket", "table": "tickets"},
+    ])
+    """When the LLM interpret finds an insight, insight event fires but no
+    auto-action (decoupled — user must request action via API)."""
     def fake_llm_ask(question, approved_terms_json, schema_and_samples, retry_note):
         return AskResponse(
             sql="SELECT count(*) AS n FROM tickets",
@@ -138,28 +170,37 @@ def test_run_ask_ticket_question_fires_insight_and_action(monkeypatch):
             reasoning_one_line="count tickets",
         )
 
-    def fake_llm_draft_action(insight_text):
-        return ActionDraftResponse(title="Investigate ticket spike", body="evidence numbers here")
+    insight_called = False
+
+    def fake_llm_interpret(question, sql, result_json, terms_used_json):
+        nonlocal insight_called
+        insight_called = True
+        return InsightInterpretation(
+            has_insight=True,
+            text="Ticket volume is elevated",
+            severity="critical",
+            warrants_action=True,
+            reasoning_one_line="spike detected",
+        )
 
     monkeypatch.setattr(agents, "llm_ask", fake_llm_ask)
-    monkeypatch.setattr(agents, "llm_draft_action", fake_llm_draft_action)
+    monkeypatch.setattr(agents, "llm_interpret_insight", fake_llm_interpret)
 
     types = _collect_run(
         lambda bus: agents.run_ask(bus, "run_tix", "What is happening with support tickets lately?")
     )
 
+    assert insight_called
     assert "insight" in types
-    assert "action_proposed" in types
-    # insight precedes the action it produces, both precede run_completed
-    assert types.index("insight") < types.index("action_proposed")
-    assert types.index("action_proposed") < types.index("run_completed")
+    # NO auto-action — action is now user-initiated via separate endpoint
+    assert "action_proposed" not in types
+    assert types.index("insight") < types.index("run_completed")
 
 
 def test_run_ask_retries_after_first_llm_failure(monkeypatch):
-    # First call simulates a BAML failure that survived BAML's own internal
-    # retries (parse/validation exhaustion) — the *outer* ask-loop (agents.py,
-    # independent of BAML's client-level retry_policy) must still treat this
-    # as one failed attempt and retry with the error appended, not crash.
+    _patch_ontology(monkeypatch, [
+        {"id": "obj_customer", "name": "Customer", "table": "customers"},
+    ])
     retry_notes: list[str] = []
 
     def fake_llm_ask(question, approved_terms_json, schema_and_samples, retry_note):
@@ -168,7 +209,14 @@ def test_run_ask_retries_after_first_llm_failure(monkeypatch):
             raise ValueError("BAML: failed to parse into AskResponse")
         return AskResponse(sql="SELECT count(*) AS n FROM customers", terms_used=["obj_customer"], reasoning_one_line="ok")
 
+    def fake_llm_interpret(question, sql, result_json, terms_used_json):
+        return InsightInterpretation(
+            has_insight=False, text="", severity="info",
+            warrants_action=False, reasoning_one_line="ok",
+        )
+
     monkeypatch.setattr(agents, "llm_ask", fake_llm_ask)
+    monkeypatch.setattr(agents, "llm_interpret_insight", fake_llm_interpret)
 
     types = _collect_run(lambda bus: agents.run_ask(bus, "run_retry", "How many customers do we have?"))
 
@@ -295,6 +343,30 @@ def test_run_ontology_draft_llm_failure_emits_error_not_crash(monkeypatch, tmp_p
     assert "error" in types
     assert types[-1] == "run_completed"
     assert not any(e.type == "ontology_term_proposed" and e.payload["term"]["kind"] == "metric" for e in envs)
+
+
+# --- run_action (decoupled from run_ask) ------------------------------------
+
+def test_run_action_emits_action_proposed_and_approval_required(monkeypatch):
+    def fake_llm_draft_action(insight_text):
+        return ActionDraftResponse(title="Investigate ticket spike", body="evidence numbers here")
+
+    monkeypatch.setattr(agents, "llm_draft_action", fake_llm_draft_action)
+
+    bus = EventBus()
+    events: list = []
+    bus.add_listener(lambda env: events.append(env))
+
+    async def go():
+        bus.bind_loop(asyncio.get_running_loop())
+        await agents.run_action(bus, "run_act", "Ticket spike detected", "insight_run_123")
+
+    asyncio.run(go())
+
+    types = [e.type for e in events]
+    assert "action_proposed" in types
+    assert "approval_required" in types
+    assert types.index("action_proposed") < types.index("approval_required")
 
 
 # --- Live LLM smoke (excluded by default) -----------------------------------

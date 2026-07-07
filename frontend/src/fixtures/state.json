@@ -3,52 +3,13 @@
     "nodes": [
       { "id": "src_customers", "kind": "source", "label": "customers", "status": "neutral", "meta": { "table": "customers" } },
       { "id": "src_orders", "kind": "source", "label": "orders", "status": "neutral", "meta": { "table": "orders" } },
-      { "id": "src_tickets", "kind": "source", "label": "tickets", "status": "neutral", "meta": { "table": "tickets" } },
-
-      { "id": "obj_customer", "kind": "object", "label": "Customer", "status": "approved", "meta": { "table": "customers" } },
-      { "id": "obj_order", "kind": "object", "label": "Order", "status": "approved", "meta": { "table": "orders" } },
-      { "id": "obj_ticket", "kind": "object", "label": "Support Ticket", "status": "approved", "meta": { "table": "tickets" } },
-
-      { "id": "m_active_customer", "kind": "metric", "label": "Active Customer", "status": "approved", "meta": { "confidence": "0.8" } },
-      { "id": "m_churn_risk", "kind": "metric", "label": "Churn Risk", "status": "proposed", "meta": { "confidence": "0.72" } },
-      { "id": "m_avg_order_value", "kind": "metric", "label": "Avg Order Value", "status": "proposed", "meta": { "confidence": "0.68" } },
-
-      { "id": "insight_ticket_spike", "kind": "insight", "label": "Ticket SLA breach spike", "status": "neutral", "meta": { "severity": "warning" } },
-      { "id": "act_0001", "kind": "action", "label": "Investigate SLA breach spike", "status": "proposed", "meta": { "kind": "jira" } }
+      { "id": "src_tickets", "kind": "source", "label": "tickets", "status": "neutral", "meta": { "table": "tickets" } }
     ],
-    "edges": [
-      { "id": "e_feeds_customers", "source": "src_customers", "target": "obj_customer", "kind": "feeds" },
-      { "id": "e_feeds_orders", "source": "src_orders", "target": "obj_order", "kind": "feeds" },
-      { "id": "e_feeds_tickets", "source": "src_tickets", "target": "obj_ticket", "kind": "feeds" },
-
-      { "id": "join_orders_customers", "source": "obj_order", "target": "obj_customer", "kind": "join" },
-      { "id": "join_tickets_customers", "source": "obj_ticket", "target": "obj_customer", "kind": "join" },
-
-      { "id": "e_derives_active_customer", "source": "obj_order", "target": "m_active_customer", "kind": "derives" },
-      { "id": "e_derives_churn_risk", "source": "obj_ticket", "target": "m_churn_risk", "kind": "derives" },
-      { "id": "e_derives_avg_order_value", "source": "obj_order", "target": "m_avg_order_value", "kind": "derives" },
-
-      { "id": "e_produces_act_0001", "source": "insight_ticket_spike", "target": "act_0001", "kind": "produces" }
-    ]
+    "edges": []
   },
-  "terms": [
-    { "id": "obj_customer", "kind": "object", "name": "Customer", "definition": "A person or account that places orders and may raise support tickets.", "sql": "", "source_tables": ["customers"], "confidence": 1.0, "status": "approved" },
-    { "id": "obj_order", "kind": "object", "name": "Order", "definition": "A purchase transaction placed by a customer.", "sql": "", "source_tables": ["orders"], "confidence": 1.0, "status": "approved" },
-    { "id": "obj_ticket", "kind": "object", "name": "Support Ticket", "definition": "A support request raised by a customer.", "sql": "", "source_tables": ["tickets"], "confidence": 1.0, "status": "approved" },
-
-    { "id": "join_orders_customers", "kind": "join", "name": "Orders → Customers", "definition": "orders.customer_id = customers.id", "sql": "orders.customer_id = customers.id", "source_tables": ["orders", "customers"], "confidence": 0.95, "status": "approved" },
-    { "id": "join_tickets_customers", "kind": "join", "name": "Tickets → Customers", "definition": "tickets.customer_id = customers.id", "sql": "tickets.customer_id = customers.id", "source_tables": ["tickets", "customers"], "confidence": 0.9, "status": "approved" },
-
-    { "id": "m_active_customer", "kind": "metric", "name": "Active Customer", "definition": "Customer with at least one order in the last 90 days", "sql": "SELECT DISTINCT customer_id FROM orders WHERE order_date >= current_date - INTERVAL 90 DAY", "source_tables": ["orders"], "confidence": 0.8, "status": "approved" },
-    { "id": "m_churn_risk", "kind": "metric", "name": "Churn Risk", "definition": "Customer with no orders in 60 days and at least one open support ticket in the last 14 days.", "sql": "SELECT DISTINCT c.id FROM customers c JOIN tickets t ON t.customer_id = c.id WHERE t.opened_at >= current_date - INTERVAL 14 DAY AND c.id NOT IN (SELECT customer_id FROM orders WHERE order_date >= current_date - INTERVAL 60 DAY)", "source_tables": ["customers", "tickets", "orders"], "confidence": 0.72, "status": "proposed" },
-    { "id": "m_avg_order_value", "kind": "metric", "name": "Avg Order Value", "definition": "Mean order total per customer over the trailing 30 days.", "sql": "SELECT customer_id, AVG(total) AS avg_order_value FROM orders WHERE order_date >= current_date - INTERVAL 30 DAY GROUP BY customer_id", "source_tables": ["orders"], "confidence": 0.68, "status": "proposed" }
-  ],
-  "actions": [
-    { "id": "act_0001", "kind": "jira", "title": "Investigate ticket SLA breach spike", "body": "Support tickets show a 3x spike in SLA breaches over the last 14 days, concentrated among churn-risk customers. Recommend triaging the backlog and reviewing on-call staffing this week.", "insight_ref": "insight_ticket_spike", "status": "proposed" }
-  ],
-  "pending": [
-    { "subject_kind": "ontology_term", "subject_id": "m_churn_risk" },
-    { "subject_kind": "ontology_term", "subject_id": "m_avg_order_value" },
-    { "subject_kind": "action", "subject_id": "act_0001" }
-  ]
+  "terms": [],
+  "actions": [],
+  "pending": [],
+  "workflows": [],
+  "active_workflow_id": null
 }

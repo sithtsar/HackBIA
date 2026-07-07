@@ -6,6 +6,8 @@ const CANNED_QUESTIONS = [
   "How many active customers do we have?",
   "What's happening with support tickets in the last two weeks?",
   "Which customers have the most open tickets?",
+  "What is the average order value this month?",
+  "Show me the daily ticket trend for the last 30 days",
 ] as const;
 
 /** Board actions owned by Topbar (single implementation: its busy guards +

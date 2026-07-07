@@ -35,6 +35,9 @@ EventType = Literal[
     "action_pushed",
     "run_completed",
     "error",
+    "workflow_created",
+    "workflow_renamed",
+    "workflow_completed",
 ]
 
 
@@ -62,6 +65,7 @@ class Envelope(BaseModel):
     id: str
     ts: str
     run_id: str
+    workflow_id: str = ""
     type: EventType
     payload: dict[str, Any]
 
@@ -115,8 +119,13 @@ class EventBus:
         payload: dict[str, Any],
         run_id: str = "",
         ts: str | None = None,
+        workflow_id: str = "",
     ) -> Envelope:
-        env = Envelope(id=self._next_id(), ts=ts or _now_iso(), run_id=run_id, type=type, payload=payload)
+        env = Envelope(
+            id=self._next_id(), ts=ts or _now_iso(),
+            run_id=run_id, workflow_id=workflow_id,
+            type=type, payload=payload,
+        )
         self._append(env)
         for fn in self._listeners:
             fn(env)
@@ -130,12 +139,15 @@ class EventBus:
         payload: dict[str, Any],
         run_id: str = "",
         ts: str | None = None,
+        workflow_id: str = "",
     ) -> Envelope:
         """Thread-safe publish for sync code running off the event loop
         thread (e.g. an agent's blocking LLM/DB call in a worker thread)."""
         if self._loop is None:
-            return self.publish(type, payload, run_id, ts)
-        fut = asyncio.run_coroutine_threadsafe(_wrap(self, type, payload, run_id, ts), self._loop)
+            return self.publish(type, payload, run_id, ts, workflow_id=workflow_id)
+        fut = asyncio.run_coroutine_threadsafe(
+            _wrap(self, type, payload, run_id, ts, workflow_id), self._loop,
+        )
         return fut.result()
 
     def _append(self, env: Envelope) -> None:
@@ -144,8 +156,8 @@ class EventBus:
             f.write(env.model_dump_json() + "\n")
 
 
-async def _wrap(bus: EventBus, type, payload, run_id, ts) -> Envelope:
-    return bus.publish(type, payload, run_id, ts)
+async def _wrap(bus: EventBus, type, payload, run_id, ts, workflow_id="") -> Envelope:
+    return bus.publish(type, payload, run_id, ts, workflow_id=workflow_id)
 
 
 async def replay(bus: EventBus, file: Path | str | None = None, speed: float = 4.0) -> int:
@@ -159,6 +171,7 @@ async def replay(bus: EventBus, file: Path | str | None = None, speed: float = 4
     path = Path(file) if file else DEMO_EVENTS_FILE
     delay = 0.3 / max(speed, 0.01)
     run_id = ""
+    workflow_id = ""
     try:
         resolved = path.resolve()
         if not resolved.is_relative_to(DATA_DIR):
@@ -176,13 +189,14 @@ async def replay(bus: EventBus, file: Path | str | None = None, speed: float = 4
             try:
                 raw = json.loads(ln)
                 run_id = raw.get("run_id", run_id)
+                workflow_id = raw.get("workflow_id", workflow_id)
                 etype, payload = raw["type"], raw["payload"]
             except Exception as exc:
                 bus.publish(
                     "error", {"message": f"replay failed at line {i}: {exc}"}, run_id=run_id
                 )
                 continue
-            bus.publish(etype, payload, run_id=run_id)
+            bus.publish(etype, payload, run_id=run_id, workflow_id=workflow_id)
             count += 1
             await asyncio.sleep(delay)
     except Exception as exc:

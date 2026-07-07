@@ -41,7 +41,7 @@ def all_succeeded(checks: typing.Dict[CheckName, Check]) -> bool:
 # #########################################################################
 
 # #########################################################################
-# Generated classes (4)
+# Generated classes (5)
 # #########################################################################
 
 class ActionDraftResponse(BaseModel):
@@ -63,6 +63,13 @@ class DraftMetric(BaseModel):
 
 class DraftMetricsResponse(BaseModel):
     metrics: typing.List["DraftMetric"] = Field(description='3-5 useful business metrics')
+
+class InsightInterpretation(BaseModel):
+    has_insight: bool
+    text: str = Field(description='one-sentence insight description; empty if has_insight is false')
+    severity: str = Field(description='\'info\', \'warning\', or \'critical\'; empty if has_insight is false')
+    warrants_action: bool
+    reasoning_one_line: str
 
 # #########################################################################
 # Generated type aliases (0)

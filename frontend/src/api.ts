@@ -1,4 +1,4 @@
-import type { BoardState, UploadResponse } from "./types";
+import type { BoardState, UploadResponse, Workflow } from "./types";
 import fixtureStateRaw from "./fixtures/state.json";
 
 // ponytail: JSON imports widen string literal fields (e.g. "status") to
@@ -156,4 +156,78 @@ export async function fetchOntologyExport(): Promise<Blob> {
     throw new Error(`GET /api/ontology/export failed: ${res.status}`);
   }
   return await res.blob();
+}
+
+// --- Workflow API ---------------------------------------------------------
+
+export async function postCreateWorkflow(title: string): Promise<{ workflow_id: string }> {
+  const res = await fetch("/api/workflows", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /api/workflows failed: ${res.status}`);
+  }
+  return (await res.json()) as { workflow_id: string };
+}
+
+export async function fetchWorkflows(): Promise<{ workflows: Workflow[] }> {
+  const res = await fetch("/api/workflows");
+  if (!res.ok) {
+    throw new Error(`GET /api/workflows failed: ${res.status}`);
+  }
+  return (await res.json()) as { workflows: Workflow[] };
+}
+
+export async function postWorkflowAsk(
+  wfId: string,
+  question: string,
+): Promise<RunHandle> {
+  const res = await fetch(`/api/workflows/${wfId}/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /api/workflows/${wfId}/ask failed: ${res.status}`);
+  }
+  return (await res.json()) as RunHandle;
+}
+
+export async function patchWorkflowStatus(
+  wfId: string,
+  status: "active" | "completed" | "failed",
+  title?: string,
+): Promise<void> {
+  const body: Record<string, string> = { status };
+  if (title !== undefined) body.title = title;
+  const res = await fetch(`/api/workflows/${wfId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`PATCH /api/workflows/${wfId} failed: ${res.status}`);
+  }
+}
+
+export type ActionDraftRequest = {
+  insight_text: string;
+  insight_node_id: string;
+};
+
+export async function postDraftAction(
+  wfId: string,
+  body: ActionDraftRequest,
+): Promise<RunHandle> {
+  const res = await fetch(`/api/workflows/${wfId}/action`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /api/workflows/${wfId}/action failed: ${res.status}`);
+  }
+  return (await res.json()) as RunHandle;
 }

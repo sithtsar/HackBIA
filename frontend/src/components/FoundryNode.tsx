@@ -1,6 +1,6 @@
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import type { GraphNode } from "../types";
-import { NODE_HEIGHT, NODE_WIDTH } from "../layout";
+import { NODE_WIDTH, NODE_HEIGHT, METRIC_NODE_HEIGHT } from "../layout";
 import { Glyph } from "./Glyph";
 
 export type FoundryNodeData = {
@@ -45,6 +45,18 @@ function ringColor(data: FoundryNodeData): string {
   return RING_BY_STATUS[data.status];
 }
 
+/** Metric/insight nodes have extra space for SQL preview. */
+function cardHeight(kind: GraphNode["kind"]): number {
+  return kind === "metric" || kind === "insight" ? METRIC_NODE_HEIGHT : NODE_HEIGHT;
+}
+
+/** Truncated SQL for metric/insight cards — first 60 chars with ellipsis. */
+function truncatedSql(sql: string | undefined): string | null {
+  if (!sql) return null;
+  const s = sql.replace(/\s+/g, " ").trim();
+  return s.length > 60 ? s.slice(0, 60) + "…" : s;
+}
+
 export function FoundryNode({ data, isConnectable }: NodeProps<FoundryFlowNode>) {
   const rejected = data.status === "rejected";
   const boxShadow =
@@ -56,10 +68,17 @@ export function FoundryNode({ data, isConnectable }: NodeProps<FoundryFlowNode>)
     : "opacity-0";
   const handleStyle = isConnectable ? connectableHandleStyle : inertHandleStyle;
 
+  const sql = truncatedSql(data.meta.sql ?? data.meta.sql_used);
+
   return (
     <div
       className="group flex flex-col justify-center gap-0.5 rounded bg-panel px-2.5 py-1.5 text-text-primary transition-shadow duration-200"
-      style={{ boxShadow, width: NODE_WIDTH, height: NODE_HEIGHT, opacity: data.dimmed ? 0.35 : 1 }}
+      style={{
+        boxShadow,
+        width: NODE_WIDTH,
+        height: cardHeight(data.kind),
+        opacity: data.dimmed ? 0.35 : 1,
+      }}
     >
       <Handle type="target" position={Position.Left} className={handleClass} style={handleStyle} />
       <div className="flex min-w-0 items-center gap-2">
@@ -84,6 +103,15 @@ export function FoundryNode({ data, isConnectable }: NodeProps<FoundryFlowNode>)
       >
         {data.description}
       </div>
+      {sql ? (
+        <div
+          className="truncate pl-6 font-mono text-[9px] text-text-secondary"
+          style={{ opacity: 0.7 }}
+          title={data.meta.sql || data.meta.sql_used}
+        >
+          {sql}
+        </div>
+      ) : null}
       <Handle type="source" position={Position.Right} className={handleClass} style={handleStyle} />
     </div>
   );
