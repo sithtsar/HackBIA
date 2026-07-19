@@ -14,6 +14,8 @@ export type ScenarioSceneProps = {
   scenario: ScenarioMeta;
   footageExists: boolean;
   captions: readonly CaptionCue[];
+  /** The technical annotation band (top of frame) — see the `techBand` track in captions.ts. */
+  techBand: readonly CaptionCue[];
   /** This scene's own duration in frames — see the note in FootageOrFallback.tsx. */
   durationInFrames: number;
 };
@@ -23,6 +25,7 @@ export const ScenarioScene: React.FC<ScenarioSceneProps> = ({
   scenario,
   footageExists,
   captions,
+  techBand,
   durationInFrames,
 }) => {
   const { fps } = useVideoConfig();
@@ -42,6 +45,7 @@ export const ScenarioScene: React.FC<ScenarioSceneProps> = ({
         fadeOutDurationInFrames={fadeFrames}
       />
       <Caption cues={captions} />
+      <Caption cues={techBand} variant="tech" />
     </AbsoluteFill>
   );
 };

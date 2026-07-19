@@ -4,9 +4,16 @@ import { colors } from "../colors";
 
 // Ken Burns ceiling — never below 1.0 (would expose the video's edges) and kept small
 // because this is a UI screen recording: heavy zoom makes small text mushy and unreadable.
-const KEN_BURNS_MAX_SCALE = 1.06;
-const KEN_BURNS_PAN_X_PERCENT = -1.5;
-const KEN_BURNS_PAN_Y_PERCENT = -1;
+//
+// The pan direction is load-bearing, not taste. `scale(s) translate(x%, y%)` applies
+// right-to-left, so the pan is scaled too and STACKS with the symmetric crop instead of
+// cancelling it: at 1.06 with x=-1.5% the left edge lost 3% + 1.5%*1.06 ≈ 88px, which ate
+// the first word of the legend in the bottom-left corner. Positive x / negative y bias the
+// surviving frame toward that corner, and a lower ceiling keeps the crop small enough that
+// the board's chrome survives at every point in the drift.
+const KEN_BURNS_MAX_SCALE = 1.03;
+const KEN_BURNS_PAN_X_PERCENT = 0.4;
+const KEN_BURNS_PAN_Y_PERCENT = -0.4;
 
 /**
  * Plays public/raw/<fileName> if it exists, else degrades to a colored placeholder card so

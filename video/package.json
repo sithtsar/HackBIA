@@ -6,7 +6,8 @@
   "scripts": {
     "preview": "remotion studio src/index.ts",
     "render": "remotion render src/index.ts DemoVideo out/demo-video.mp4",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:captions": "bun run src/captions.check.ts"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.491",

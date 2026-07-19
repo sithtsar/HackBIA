@@ -123,6 +123,13 @@ function snapshotKey(state) {
 // the longest real gap between state-touching events: in the recorded
 // retail log that's ~5.3s (the ask flow's SQL execution between the last
 // ontology approval and the insight landing), so 6s with margin.
+// A burst of nodes counts as "landed" long before the whole run is quiescent.
+// Fitting only at quiescence (stableFor, 6s) leaves the graph growing past the
+// right edge for the entire streaming phase -- the most interesting part of the
+// footage -- with an unclicked chip sitting there. Re-fit after this much calm
+// instead, which is long enough that the camera isn't chasing every single node.
+const BURST_SETTLED_MS = 1200;
+
 async function waitForQuiescence({ timeout = 90000, stableFor = 6000, interval = 300, label = "run" } = {}) {
   const start = Date.now();
   let lastKey = null;
@@ -136,10 +143,14 @@ async function waitForQuiescence({ timeout = 90000, stableFor = 6000, interval =
       lastKey = key;
       lastChangeAt = Date.now();
     }
-    if (Date.now() - lastChangeAt >= stableFor) {
+    const calmFor = Date.now() - lastChangeAt;
+    if (calmFor >= stableFor) {
       await fitViewIfGrown(state);
       return state;
     }
+    // Cheap: fitViewIfGrown is a no-op unless the node count actually grew
+    // since the last fit, so this re-frames once per burst, not once per poll.
+    if (calmFor >= BURST_SETTLED_MS) await fitViewIfGrown(state);
     if (Date.now() - start > timeout) throw new Error(`timed out waiting for ${label} to settle`);
     await sleep(interval);
   }

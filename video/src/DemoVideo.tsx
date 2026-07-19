@@ -5,8 +5,9 @@ import { fade } from "@remotion/transitions/fade";
 import { TitleCard } from "./compositions/TitleCard";
 import { Outro } from "./compositions/Outro";
 import { ScenarioScene } from "./compositions/ScenarioScene";
+import { ArchScene } from "./compositions/ArchScene";
 import { ProgressBar } from "./components/ProgressBar";
-import { captions } from "./captions";
+import { captions, techBand } from "./captions";
 import type { ScenarioMeta } from "./scenarios";
 
 export type DemoVideoScene = {
@@ -18,6 +19,8 @@ export type DemoVideoScene = {
 // `type`, not `interface` — see the note in compositions/ScenarioScene.tsx.
 export type DemoVideoProps = {
   titleDurationInFrames: number;
+  /** The all-Remotion architecture explainer, between the title card and Act 1. */
+  archDurationInFrames: number;
   outroDurationInFrames: number;
   scenes: readonly DemoVideoScene[];
 };
@@ -26,7 +29,7 @@ export type DemoVideoProps = {
 // still gets its own full local frame range (0..durationInFrames-1) — captions and Ken Burns
 // key off that local frame, so overlapping the boundary does NOT desync them. What it does
 // change: the total assembled video is shorter than the sum of the scene durations, by
-// TRANSITION_FRAMES per boundary (4 boundaries here) — Root.tsx's DemoVideo composition
+// TRANSITION_FRAMES per boundary (title->arch->3 scenes->outro = 5 boundaries) — Root.tsx's DemoVideo composition
 // duration accounts for that explicitly so playback doesn't run past the real content.
 export const TRANSITION_FRAMES = 15;
 
@@ -37,9 +40,10 @@ const transition = () => (
   />
 );
 
-/** The deliverable: title card -> one scene per scenario -> outro, crossfading at each cut. */
+/** The deliverable: title -> architecture -> one scene per scenario -> outro, crossfading at each cut. */
 export const DemoVideo: React.FC<DemoVideoProps> = ({
   titleDurationInFrames,
+  archDurationInFrames,
   outroDurationInFrames,
   scenes,
 }) => (
@@ -49,6 +53,10 @@ export const DemoVideo: React.FC<DemoVideoProps> = ({
         <TitleCard />
       </TransitionSeries.Sequence>
       {transition()}
+      <TransitionSeries.Sequence durationInFrames={archDurationInFrames}>
+        <ArchScene />
+      </TransitionSeries.Sequence>
+      {transition()}
       {scenes.map((scene, i) => (
         <React.Fragment key={scene.scenario.id}>
           <TransitionSeries.Sequence durationInFrames={scene.durationInFrames}>
@@ -56,6 +64,7 @@ export const DemoVideo: React.FC<DemoVideoProps> = ({
               scenario={scene.scenario}
               footageExists={scene.footageExists}
               captions={captions[scene.scenario.id]}
+              techBand={techBand[scene.scenario.id]}
               durationInFrames={scene.durationInFrames}
             />
           </TransitionSeries.Sequence>
