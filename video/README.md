@@ -1,8 +1,9 @@
 # Foundry-Lite demo video (Remotion)
 
-Separate Bun package, not part of `frontend/`. 1920x1080, 30fps, five compositions
-(`TitleCard`, `Retail`, `Supply`, `Fintech`, `Outro`) assembled into one deliverable
-composition, `DemoVideo`.
+Separate Bun package, not part of `frontend/`. 1920x1080, 30fps, six compositions
+(`TitleCard`, `Arch`, `Retail`, `Supply`, `Fintech`, `Outro`) assembled into one
+deliverable composition, `DemoVideo`. `Arch` is the all-Remotion architecture
+explainer (no footage); the three scenario scenes play captured board footage.
 
 ## Footage placement — READ THIS IF YOU'RE DROPPING IN CAPTURED CLIPS
 
