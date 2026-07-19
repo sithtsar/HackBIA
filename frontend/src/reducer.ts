@@ -91,6 +91,23 @@ export function reduceBoard(board: BoardState, envelope: EventEnvelope): BoardSt
           edges = [...edges, { id: edgeId, source: objectId, target: term.id, kind: "derives" }];
         }
       }
+      // Same reasoning as metrics above, for objects: backend build_graph emits
+      // e_feeds_<table> (src_<table> -> object), but only a full refetch carries
+      // it. Without this, every freshly proposed object floats as a disconnected
+      // root until the next GET /api/state — which the layout then honours by
+      // filing each one into rank 0, so the board reads as scattered boxes.
+      if (term.kind === "object") {
+        const table = term.source_tables[0] ?? "";
+        const sourceId = `src_${table}`;
+        const edgeId = `e_feeds_${table}`;
+        if (
+          table &&
+          nodes.some((n) => n.id === sourceId) &&
+          !edges.some((e) => e.id === edgeId)
+        ) {
+          edges = [...edges, { id: edgeId, source: sourceId, target: term.id, kind: "feeds" }];
+        }
+      }
       return { ...board, terms, graph: { nodes, edges } };
     }
 

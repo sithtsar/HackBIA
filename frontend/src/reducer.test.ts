@@ -59,6 +59,79 @@ describe("reduceBoard", () => {
     });
   });
 
+  test("ontology_term_proposed object adds an e_feeds edge from its source node", () => {
+    // Without this edge the object is a disconnected root until the next
+    // GET /api/state, and dagre lays every such node out in rank 0 — which is
+    // what made the board read as a scatter of unrelated cards mid-run.
+    const board = boardWith({
+      graph: {
+        nodes: [
+          { id: "src_tickets", kind: "source", label: "tickets", status: "neutral", meta: { table: "tickets" } },
+        ],
+        edges: [],
+      },
+    });
+    const proposeTicket = envelope<EventEnvelope>({
+      id: "evt_o1",
+      ts: "2026-07-03T10:00:00Z",
+      run_id: "run_a",
+      type: "ontology_term_proposed",
+      payload: {
+        term: {
+          id: "obj_ticket",
+          kind: "object",
+          name: "Support Ticket",
+          definition: "A Support Ticket record sourced from tickets.",
+          sql: "",
+          source_tables: ["tickets"],
+          confidence: 0.9,
+          status: "proposed",
+        },
+      },
+    });
+
+    const next = reduceBoard(board, proposeTicket);
+
+    // Same id scheme as backend build_graph: e_feeds_<table>, source -> object.
+    expect(next.graph.edges).toHaveLength(1);
+    expect(next.graph.edges[0]).toMatchObject({
+      id: "e_feeds_tickets",
+      source: "src_tickets",
+      target: "obj_ticket",
+      kind: "feeds",
+    });
+
+    // Re-emitting (replay + live both fire) must not duplicate the edge.
+    expect(reduceBoard(next, proposeTicket).graph.edges).toHaveLength(1);
+  });
+
+  test("ontology_term_proposed object with no source node adds the term but no edge", () => {
+    const next = reduceBoard(
+      emptyBoard(),
+      envelope<EventEnvelope>({
+        id: "evt_o2",
+        ts: "2026-07-03T10:00:00Z",
+        run_id: "run_a",
+        type: "ontology_term_proposed",
+        payload: {
+          term: {
+            id: "obj_ghost",
+            kind: "object",
+            name: "Ghost",
+            definition: "d",
+            sql: "",
+            source_tables: ["nowhere"],
+            confidence: 0.5,
+            status: "proposed",
+          },
+        },
+      }),
+    );
+
+    expect(next.graph.nodes).toHaveLength(1);
+    expect(next.graph.edges).toHaveLength(0);
+  });
+
   test("ontology_term_proposed metric adds e_derives edges to existing objects (guarded + deduped)", () => {
     const board = boardWith({
       graph: {

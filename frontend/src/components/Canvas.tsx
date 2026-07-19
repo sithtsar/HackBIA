@@ -13,6 +13,7 @@ import {
   type IsValidConnection,
   type NodeMouseHandler,
   type OnConnect,
+  type OnNodeDrag,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { ActionProposal, GraphEdge, GraphNode, OntologyTerm } from "../types";
@@ -25,6 +26,10 @@ import { FoundryNode, type FoundryFlowNode, type FoundryNodeData } from "./Found
 const nodeTypes = { foundry: FoundryNode };
 
 const DIMMED = 0.35;
+
+/** Shared by mount, the new-nodes chip, and the palette's Fit view, so the
+ * camera lands identically however it was asked to. */
+const FIT_OPTIONS = { padding: 0.18, maxZoom: 1 } as const;
 
 type CanvasProps = {
   nodes: GraphNode[];
@@ -75,25 +80,33 @@ function LegendLine({ dashed }: { dashed: boolean }) {
   );
 }
 
+/** One quiet row along the bottom edge. The five-row stacked box read as a
+ * second panel competing with the graph; the same information fits inline. */
 function Legend() {
   return (
     <Panel position="bottom-left">
-      <div className="rounded border border-hairline bg-panel px-2.5 py-2 font-mono text-[10px] leading-[18px] text-text-secondary">
-        <div>
-          <LegendDot color="var(--color-pending-amber)" /> proposed
-        </div>
-        <div>
-          <LegendDot color="var(--color-committed-green)" /> approved
-        </div>
-        <div>
-          <LegendDot color="var(--color-agent-blue)" /> live activity
-        </div>
-        <div>
-          <LegendLine dashed /> join
-        </div>
-        <div>
-          <LegendLine dashed={false} /> data flow
-        </div>
+      <div className="flex items-center gap-3.5 rounded border border-hairline/60 bg-panel/80 px-3 py-1.5 font-mono text-[10px] tracking-wide text-text-secondary backdrop-blur-sm">
+        <span>
+          <LegendDot color="var(--color-pending-amber)" />
+          proposed
+        </span>
+        <span>
+          <LegendDot color="var(--color-committed-green)" />
+          approved
+        </span>
+        <span>
+          <LegendDot color="var(--color-agent-blue)" />
+          live
+        </span>
+        <span className="text-hairline">│</span>
+        <span>
+          <LegendLine dashed={false} />
+          flow
+        </span>
+        <span>
+          <LegendLine dashed />
+          join
+        </span>
       </div>
     </Panel>
   );
@@ -144,7 +157,7 @@ function NewNodesChip({ flowNodes }: { flowNodes: FoundryFlowNode[] }) {
       <button
         type="button"
         onClick={() => {
-          void fitView({ padding: 0.15, duration: 250 }); // motion on user gesture only
+          void fitView({ ...FIT_OPTIONS, duration: 400 }); // motion on user gesture only
           setCount(0);
         }}
         className="rounded border border-hairline bg-panel px-2.5 py-1 font-mono text-[11px] text-text-secondary hover:text-text-primary"
@@ -161,7 +174,7 @@ function FitOnEvent() {
   const { fitView } = useReactFlow();
   useEffect(() => {
     const onFit = (): void => {
-      void fitView({ padding: 0.15, duration: 250 }); // user gesture, motion ok
+      void fitView({ ...FIT_OPTIONS, duration: 400 }); // user gesture, motion ok
     };
     window.addEventListener("foundry:fit", onFit);
     return () => window.removeEventListener("foundry:fit", onFit);
@@ -175,6 +188,70 @@ function sameCardData(a: FoundryNodeData, b: FoundryNodeData): boolean {
     a.status === b.status &&
     a.description === b.description &&
     a.meta === b.meta
+  );
+}
+
+type XY = { x: number; y: number };
+
+/** Time constant for the glide toward a new layout: positions close ~63% of
+ * the remaining distance every TAU ms, so a move settles in roughly 300ms. */
+const GLIDE_TAU_MS = 90;
+/** Below this many px from target, snap and stop — avoids an endless tail. */
+const SETTLE_PX = 0.5;
+
+/**
+ * Relayout is only correct if EVERY node moves to its new dagre position;
+ * placing just the new nodes leaves the rest in the previous layout's frame
+ * of reference and they overlap. Existing nodes therefore have to travel, and
+ * teleporting them reads as the graph warping. This eases them instead.
+ *
+ * Positions are interpolated in React Flow's own node state (not via a CSS
+ * transform transition) so edges re-path in lockstep with the cards; a CSS
+ * transition animates the card but leaves edges snapping to their endpoints
+ * a frame later.
+ */
+function useGlide(setFlowNodes: React.Dispatch<React.SetStateAction<FoundryFlowNode[]>>) {
+  const targets = useRef<Map<string, XY>>(new Map());
+  const raf = useRef<number | null>(null);
+  const lastTs = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      if (raf.current !== null) cancelAnimationFrame(raf.current);
+    };
+  }, []);
+
+  return useCallback(
+    (next: Map<string, XY>) => {
+      targets.current = next;
+      if (next.size === 0 || raf.current !== null) return; // a running loop picks up new targets
+      lastTs.current = performance.now();
+      const step = (ts: number) => {
+        // dt-based easing keeps the glide identical whether the board is
+        // running at 60fps live or being driven by the capture harness.
+        const dt = Math.min(ts - lastTs.current, 64);
+        lastTs.current = ts;
+        const k = 1 - Math.exp(-dt / GLIDE_TAU_MS);
+        let moving = false;
+        setFlowNodes((prev) =>
+          prev.map((n) => {
+            const t = targets.current.get(n.id);
+            if (t === undefined) return n;
+            const dx = t.x - n.position.x;
+            const dy = t.y - n.position.y;
+            if (Math.abs(dx) < SETTLE_PX && Math.abs(dy) < SETTLE_PX) {
+              if (dx === 0 && dy === 0) return n;
+              return { ...n, position: { x: t.x, y: t.y } };
+            }
+            moving = true;
+            return { ...n, position: { x: n.position.x + dx * k, y: n.position.y + dy * k } };
+          }),
+        );
+        raf.current = moving ? requestAnimationFrame(step) : null;
+      };
+      raf.current = requestAnimationFrame(step);
+    },
+    [setFlowNodes],
   );
 }
 
@@ -194,21 +271,49 @@ export function Canvas({
   // or rebuild the array — moving one node re-renders only that node.
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState<FoundryFlowNode>([]);
 
-  // Reconcile board -> flow nodes. Layout runs on new ids only via dagre.
+  const glide = useGlide(setFlowNodes);
+  /** Nodes the user dragged: layout proposes, the human disposes. */
+  const pinned = useRef<Set<string>>(new Set());
+  /** Ids that already have a position on the board, so we know which nodes
+   * are arriving (place at target, no travel) vs. moving (glide). */
+  const placed = useRef<Set<string>>(new Set());
+  const lastLayout = useRef<Map<string, XY>>(new Map());
+  const lastTopology = useRef("");
+
+  /** Relayout key. Edges are part of it deliberately: a proposed join adds no
+   * node but re-ranks the DAG, and keying on node count alone left those
+   * nodes sitting in the pre-join layout. */
+  const topology = useMemo(
+    () =>
+      nodes
+        .map((n) => n.id)
+        .sort()
+        .join("|") +
+      "##" +
+      edges
+        .map((e) => `${e.source}>${e.target}`)
+        .sort()
+        .join("|"),
+    [nodes, edges],
+  );
+
+  // Reconcile board -> flow nodes. Dagre re-runs whenever topology changes and
+  // every unpinned node adopts the result.
   useEffect(() => {
     const termDefById = new Map(terms.map((t: OntologyTerm) => [t.id, t.definition]));
     const actionsById = new Map(actions.map((a) => [a.id, a]));
+
+    const topoChanged = topology !== lastTopology.current;
+    if (topoChanged) {
+      lastTopology.current = topology;
+      lastLayout.current = new Map(
+        layoutGraph(nodes, edges).map((n) => [n.id, { x: n.x, y: n.y }]),
+      );
+    }
+    const layout = lastLayout.current;
+
     setFlowNodes((prev) => {
       const prevById = new Map(prev.map((n) => [n.id, n]));
-      const hasNew = nodes.some((n) => !prevById.has(n.id));
-      const autoPos = hasNew
-        ? new Map(
-            layoutGraph(nodes, edges).map((n) => [
-              n.id,
-              { x: n.x, y: n.y },
-            ]),
-          )
-        : null;
       return nodes.map((node): FoundryFlowNode => {
         const card: FoundryNodeData = {
           label: node.label,
@@ -235,16 +340,39 @@ export function Canvas({
             },
           };
         }
+        // Arriving node: mount directly at its final slot. It should fade in
+        // where it belongs, never fly in from the origin.
         return {
           id: node.id,
           type: "foundry",
-          position: autoPos?.get(node.id) ?? { x: 0, y: 0 },
+          position: layout.get(node.id) ?? { x: 0, y: 0 },
           connectable: node.kind === "object", // drag-to-connect joins are object->object only
           data: card,
         };
       });
     });
-  }, [nodes, edges, terms, actions, setFlowNodes]);
+
+    if (topoChanged) {
+      const ids = new Set(nodes.map((n) => n.id));
+      // Scenario switches rebuild the graph from scratch; drop ids that are
+      // gone so a returning id isn't treated as already-placed or still-pinned.
+      for (const s of [pinned.current, placed.current]) {
+        for (const id of s) if (!ids.has(id)) s.delete(id);
+      }
+      const moving = new Map<string, XY>();
+      for (const [id, p] of layout) {
+        if (placed.current.has(id) && !pinned.current.has(id)) moving.set(id, p);
+      }
+      glide(moving);
+      for (const id of ids) placed.current.add(id);
+    }
+  }, [nodes, edges, terms, actions, topology, setFlowNodes, glide]);
+
+  /** A drag is an explicit statement about where a node belongs; pin it so the
+   * next agent-driven relayout doesn't yank it back. */
+  const onNodeDragStop = useCallback<OnNodeDrag<FoundryFlowNode>>((_event, node) => {
+    pinned.current.add(node.id);
+  }, []);
 
   // Upstream lineage of the selection; null when nothing is selected.
   const lineage = useMemo(
@@ -284,7 +412,12 @@ export function Canvas({
           id: edge.id,
           source: edge.source,
           target: edge.target,
+          // Orthogonal routing: lineage reads as a wiring diagram rather than
+          // a bundle of overlapping curves once the graph gets wide.
+          type: "smoothstep",
+          pathOptions: { borderRadius: 8 },
           animated: active, // motion only for live events, never for steady selection
+          zIndex: highlighted ? 1 : 0,
           style: {
             stroke: highlighted
               ? "var(--color-agent-blue)"
@@ -336,14 +469,21 @@ export function Canvas({
       onNodesChange={onNodesChange}
       elementsSelectable={false}
       onNodeClick={onNodeClick}
+      onNodeDragStop={onNodeDragStop}
       onPaneClick={onPaneClick}
       onConnect={onConnect}
       isValidConnection={isValidConnection}
       fitView // initial mount only; afterwards the camera moves solely on user gestures
+      // maxZoom 1 == cards at their designed size. Without it, a board with
+      // only the three seed sources fits by blowing them up to fill 1080p.
+      fitViewOptions={FIT_OPTIONS}
+      minZoom={0.2}
       proOptions={{ hideAttribution: true }}
       colorMode="dark"
     >
-      <Background variant={BackgroundVariant.Dots} color="#2B3444" gap={20} size={1} />
+      {/* Dim, wide grid: enough to read as a workspace, not enough to compete
+          with the cards for attention at video bitrates. */}
+      <Background variant={BackgroundVariant.Dots} color="#1E2632" gap={28} size={1} />
       <Controls showInteractive={false} position="top-left" className="foundry-controls" />
       <Legend />
       <NewNodesChip flowNodes={flowNodes} />
