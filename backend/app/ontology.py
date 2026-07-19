@@ -27,6 +27,23 @@ ONTOLOGY_PATH = DATA_DIR / "ontology.yaml"
 ONTOLOGY_BASELINE_PATH = DATA_DIR / "ontology.baseline.yaml"
 
 
+def baseline_for(tables: tuple[str, ...] | list[str]) -> dict[str, Any]:
+    """A pristine ontology for a scenario: its source tables and nothing else.
+
+    Objects, joins and metrics are what the agent proposes during a run, so a
+    baseline holds no information beyond the table names — generating it beats
+    maintaining a near-identical YAML file per scenario. Retail still resets
+    from the committed ONTOLOGY_BASELINE_PATH, which this must stay in sync
+    with (test_scenarios.py asserts they match)."""
+    return {
+        "version": 1,
+        "sources": [{"table": t} for t in tables],
+        "objects": [],
+        "joins": [],
+        "metrics": [],
+    }
+
+
 def load_ontology(path: Path = ONTOLOGY_PATH) -> dict[str, Any]:
     with open(path) as f:
         return yaml.safe_load(f)

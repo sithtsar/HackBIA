@@ -133,6 +133,33 @@ cd frontend && bun test && bunx tsc -b # frontend
 solution-style config, and plain `tsc` ignores project references and silently
 compiles nothing.
 
+### Demo scenarios
+
+The agent never sees a hardcoded schema — it introspects whatever tables exist
+and drafts an ontology from them. So swapping the demo domain is a data change,
+not a code change:
+
+| Scenario | Tables | Planted anomaly | Ask |
+|---|---|---|---|
+| `retail` (default) | customers, orders, tickets | ticket volume ~3x, SLA breach 10% → 40% | "Why did support tickets spike recently?" |
+| `supply` | suppliers, shipments, delays | one supplier's late rate 12% → 65% | "Which supplier is driving our late deliveries?" |
+| `fintech` | accounts, transactions, chargebacks | mobile_wallet chargebacks 0.9% → 11% | "Which payment channel is driving chargebacks?" |
+
+```bash
+uv run python -m backend.app.seed --scenario supply   # from the CLI
+curl -X POST localhost:8400/api/demo/reset -d '{"scenario":"fintech"}' \
+     -H 'content-type: application/json'              # or live, mid-demo
+```
+
+`GET /api/scenarios` lists them. Switching drops the previous scenario's tables
+and CSVs and rebuilds the ontology around the new ones, so the agent is never
+looking at a schema that is no longer loaded.
+
+Supply and fintech hide their anomaly inside a single segment — one supplier,
+one payment channel. Measured across the whole table they look like noise
+(supply reads 14% vs 12%); the spike only appears once the agent groups by the
+right dimension, which is the point.
+
 ### No API key? Replay the demo
 
 `POST /api/replay` (or the Replay button / ⌘K) replays `backend/data/demo_events.jsonl` onto the live event bus — the entire board runs identically with zero LLM calls.

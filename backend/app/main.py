@@ -26,6 +26,7 @@ from sse_starlette.sse import EventSourceResponse
 from . import agents
 from . import ingest as ingest_mod
 from . import ontology as onto_mod
+from . import scenarios
 from . import seed as seed_mod
 from .actions import ActionPushError, push_action
 from .events import DEMO_EVENTS_FILE, ActionProposal, Envelope, EventBus, OntologyTerm, replay as replay_events
@@ -52,6 +53,8 @@ _term_edges: dict[str, dict[str, Any]] = {}
 _workflows: dict[str, dict[str, Any]] = {}
 _insight_seq: dict[str, int] = {}  # run_id -> sequence counter for multi-insight
 _active_workflow_id: str | None = None
+# Which demo domain is loaded. Reset switches it; seed defaults to retail.
+_active_scenario: str = scenarios.DEFAULT_SCENARIO
 _insight_sql_used: dict[str, str] = {}  # insight_node_id -> sql used to produce it
 
 
@@ -520,14 +523,27 @@ async def upload_data(file: UploadFile = File(...), table: str | None = Form(Non
     return {"table": result.table, "rows": result.rows, "columns": result.columns}
 
 
-async def _restore_baseline() -> None:
+async def _restore_baseline(scenario_key: str | None = None) -> None:
     """Reseed CSVs/foundry.duckdb (drops any uploaded tables), restore
-    ontology.yaml from the committed baseline, clear all in-memory
+    ontology.yaml to the active scenario's baseline, clear all in-memory
     event-derived demo state, and truncate the event log. Shared by
     /api/demo/reset and /api/replay's reset=true (default) path so a replay
-    never stacks its events on top of stale live state."""
-    await asyncio.to_thread(seed_mod.main)
-    shutil.copy2(onto_mod.ONTOLOGY_BASELINE_PATH, onto_mod.ONTOLOGY_PATH)
+    never stacks its events on top of stale live state.
+
+    Passing scenario_key switches the demo domain: the previous scenario's
+    tables and CSVs go away and the ontology is rebuilt around the new ones,
+    so the agent never introspects a schema that is no longer loaded."""
+    global _active_scenario
+    scenario = scenarios.get(scenario_key or _active_scenario)
+    await asyncio.to_thread(seed_mod.main, scenario.key)
+
+    if scenario.key == scenarios.DEFAULT_SCENARIO:
+        # Retail resets from the committed file — it doubles as demo insurance
+        # if the generator ever regresses.
+        shutil.copy2(onto_mod.ONTOLOGY_BASELINE_PATH, onto_mod.ONTOLOGY_PATH)
+    else:
+        onto_mod.save_ontology(onto_mod.baseline_for(scenario.tables), onto_mod.ONTOLOGY_PATH)
+    _active_scenario = scenario.key
 
     _actions.clear()
     _pending.clear()
@@ -555,12 +571,35 @@ async def replay_route(body: ReplayBody | None = None) -> dict[str, bool]:
     return {"ok": True}
 
 
+class ResetBody(BaseModel):
+    scenario: str | None = None
+
+
 @app.post("/api/demo/reset")
-async def demo_reset() -> dict[str, bool]:
-    """Rebuild the demo to its pristine baseline (see _restore_baseline)."""
-    await _restore_baseline()
-    bus.publish("status", {"message": "demo reset: seed rebuilt, ontology baseline restored"})
+async def demo_reset(body: ResetBody | None = None) -> dict[str, bool]:
+    """Rebuild the demo to its pristine baseline (see _restore_baseline).
+
+    Pass {"scenario": "supply"} to switch domains — same board, different
+    data, and an ontology the agent has to draft from scratch."""
+    key = (body or ResetBody()).scenario
+    if key is not None and key not in scenarios.SCENARIOS:
+        raise HTTPException(status_code=422, detail=f"unknown scenario {key!r}")
+    await _restore_baseline(key)
+    scenario = scenarios.get(_active_scenario)
+    bus.publish("status", {"message": f"demo reset [{scenario.key}]: {scenario.label}"})
     return {"ok": True}
+
+
+@app.get("/api/scenarios")
+async def list_scenarios() -> dict[str, Any]:
+    """Lets the board offer the demo domains without hardcoding them."""
+    return {
+        "active": _active_scenario,
+        "scenarios": [
+            {"key": s.key, "label": s.label, "tables": list(s.tables), "question": s.question}
+            for s in scenarios.SCENARIOS.values()
+        ],
+    }
 
 
 @app.get("/api/ontology/export")

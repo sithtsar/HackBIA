@@ -105,7 +105,7 @@ def test_reset_rebuilds_seed_restores_baseline_clears_state_emits_event(_isolate
 
     # exactly one status event on the bus, and it's the reset marker.
     assert env.type == "status"
-    assert env.payload == {"message": "demo reset: seed rebuilt, ontology baseline restored"}
+    assert env.payload == {"message": "demo reset [retail]: Retail support operations"}
 
     # events.jsonl was truncated then got only the reset's own status line.
     lines = events_path.read_text().strip().splitlines()
