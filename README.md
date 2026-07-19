@@ -86,13 +86,18 @@ graph LR
 
 ## Bring It Up
 
-Prerequisites: [uv](https://docs.astral.sh/uv/), [bun](https://bun.sh/), Python 3.13.
+Prerequisites: [uv](https://docs.astral.sh/uv/), [bun](https://bun.sh/) >= 1.2, Python 3.13.
 
-1. Put your Cerebras key in a `.env` at the repo root (gitignored):
+1. Copy the env template and put your Cerebras key in it (`.env` is gitignored):
 
+   ```bash
+   cp .env.example .env   # then set CEREBRAS_API_KEY=<your key>
    ```
-   CEREBRAS_API_KEY=<your key>
-   ```
+
+   Only `CEREBRAS_API_KEY` is required. The `JIRA_*` and `SLACK_WEBHOOK_URL`
+   entries are optional: leave them blank and the action adapter runs in **mock
+   mode**, logging a warning and returning a fake `mock.jira.local` URL instead
+   of creating a real ticket (`backend/app/actions.py`).
 
 2. Backend:
 
@@ -120,9 +125,13 @@ Reset to a clean slate anytime: `POST /api/demo/reset` (or the Reset button in t
 ### Test it
 
 ```bash
-uv run pytest                                  # backend
-cd frontend && bun test && bunx tsc --noEmit   # frontend
+uv run pytest                          # backend
+cd frontend && bun test && bunx tsc -b # frontend
 ```
+
+`tsc -b` (not `tsc --noEmit`) is the real check — `frontend/tsconfig.json` is a
+solution-style config, and plain `tsc` ignores project references and silently
+compiles nothing.
 
 ### No API key? Replay the demo
 
@@ -139,10 +148,16 @@ cd frontend && bun test && bunx tsc --noEmit   # frontend
 
 ```
 backend/app/       # FastAPI routes, event bus, ontology, agents, Jira adapter, seed
-backend/data/      # CSVs, foundry.duckdb, ontology.yaml, events.jsonl, demo_events.jsonl
+backend/data/      # committed: CSVs, ontology.yaml, ontology.baseline.yaml, demo_events.jsonl
+                   # generated: foundry.duckdb, events.jsonl (gitignored; seed/bus create them)
 baml_src/          # BAML function + output class definitions
 baml_client/       # generated BAML client (committed)
 frontend/src/      # React board (Vite + TS strict + Tailwind + @xyflow/react)
 docs/              # contracts.md (source of truth), DEMO.md (runbook)
 tests/             # backend pytest suite
 ```
+
+`ontology.yaml` is both committed and mutated at runtime (drafting and approval
+write to it), so it will show as modified after any demo run — that is expected.
+`ontology.baseline.yaml` is the pristine copy that Reset and Replay restore from;
+deleting it as a "duplicate fixture" breaks both.

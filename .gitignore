@@ -13,8 +13,7 @@ wheels/
 # reads/re-emits it). data/demo_events.jsonl (handcrafted) and
 # data/ontology.yaml (baseline) are the actual source-controlled fixtures.
 backend/data/events.jsonl
-.env
 backend/data/foundry.duckdb
-backend/data/events.jsonl
+.env
 .amr/
 backend/data/uploads/

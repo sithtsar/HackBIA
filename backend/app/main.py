@@ -72,6 +72,7 @@ def _create_workflow(title: str) -> str:
 
 
 def _on_event(env: Envelope) -> None:
+    global _active_workflow_id
     if env.type == "insight":
         # Multi-insight support: sequential ids per run
         seq = _insight_seq.get(env.run_id, 0) + 1
@@ -173,6 +174,10 @@ def _on_event(env: Envelope) -> None:
                 "created_at": env.ts,
                 "run_ids": [],
             }
+        # Replay drives workflows through here only (never _create_workflow), so
+        # without this the board ends up with a workflow but no active pointer,
+        # and the next /api/ask forks a second one instead of joining it.
+        _active_workflow_id = wid
 
 
 bus.add_listener(_on_event)
@@ -263,7 +268,9 @@ async def sse_events() -> EventSourceResponse:
         finally:
             bus.unsubscribe(q)
 
-    return EventSourceResponse(gen())
+    # ping= emits a comment frame while idle; without it a proxy between the
+    # board and the API is free to drop a quiet connection.
+    return EventSourceResponse(gen(), ping=15)
 
 
 class AskBody(BaseModel):

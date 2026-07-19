@@ -3,11 +3,26 @@ import { reduceBoard } from "./reducer";
 import type { BoardState, EventEnvelope } from "./types";
 
 function emptyBoard(): BoardState {
-  return { graph: { nodes: [], edges: [] }, terms: [], actions: [], pending: [] };
+  return {
+    graph: { nodes: [], edges: [] },
+    terms: [],
+    actions: [],
+    pending: [],
+    workflows: [],
+    active_workflow_id: null,
+  };
 }
 
-function envelope<T extends EventEnvelope>(partial: T): T {
-  return partial;
+// Board fixtures that need pre-existing nodes/terms start from the empty board
+// so a new BoardState field only has to be added in one place.
+function boardWith(over: Partial<BoardState>): BoardState {
+  return { ...emptyBoard(), ...over };
+}
+
+// workflow_id is defaulted here rather than repeated in every fixture: these
+// events predate workflow scoping and none of them assert on it.
+function envelope<T extends EventEnvelope>(partial: Omit<T, "workflow_id">): T {
+  return { workflow_id: "", ...partial } as T;
 }
 
 describe("reduceBoard", () => {
@@ -45,7 +60,7 @@ describe("reduceBoard", () => {
   });
 
   test("ontology_term_proposed metric adds e_derives edges to existing objects (guarded + deduped)", () => {
-    const board: BoardState = {
+    const board = boardWith({
       graph: {
         nodes: [
           { id: "obj_order", kind: "object", label: "Order", status: "approved", meta: { table: "orders" } },
@@ -55,7 +70,7 @@ describe("reduceBoard", () => {
       terms: [],
       actions: [],
       pending: [],
-    };
+    });
     const e = envelope<EventEnvelope>({
       id: "evt_10",
       ts: "2026-07-03T10:00:00Z",
@@ -91,7 +106,7 @@ describe("reduceBoard", () => {
   });
 
   test("ontology_term_proposed join adds a join edge reusing the term id (no node)", () => {
-    const board: BoardState = {
+    const board = boardWith({
       graph: {
         nodes: [
           { id: "obj_order", kind: "object", label: "Order", status: "approved", meta: { table: "orders" } },
@@ -102,7 +117,7 @@ describe("reduceBoard", () => {
       terms: [],
       actions: [],
       pending: [],
-    };
+    });
     const e = envelope<EventEnvelope>({
       id: "evt_11",
       ts: "2026-07-03T10:00:00Z",
@@ -138,7 +153,7 @@ describe("reduceBoard", () => {
   });
 
   test("ontology_term_proposed join with a missing object adds the term but no edge", () => {
-    const board: BoardState = {
+    const board = boardWith({
       graph: {
         nodes: [
           { id: "obj_order", kind: "object", label: "Order", status: "approved", meta: { table: "orders" } },
@@ -148,7 +163,7 @@ describe("reduceBoard", () => {
       terms: [],
       actions: [],
       pending: [],
-    };
+    });
     const e = envelope<EventEnvelope>({
       id: "evt_12",
       ts: "2026-07-03T10:00:00Z",
@@ -185,6 +200,7 @@ describe("reduceBoard", () => {
         text: "Ticket SLA breach spike",
         severity: "warning",
         node_ids: ["obj_ticket", "m_churn_risk"],
+        sql_used: "SELECT 1",
       },
     });
 
@@ -250,7 +266,7 @@ describe("reduceBoard", () => {
   });
 
   test("approval_resolved flips term status to approved and clears the pending entry", () => {
-    const board: BoardState = {
+    const board = boardWith({
       graph: {
         nodes: [
           { id: "m_churn_risk", kind: "metric", label: "Churn Risk", status: "proposed", meta: {} },
@@ -271,7 +287,7 @@ describe("reduceBoard", () => {
       ],
       actions: [],
       pending: [{ subject_kind: "ontology_term", subject_id: "m_churn_risk" }],
-    };
+    });
     const e = envelope<EventEnvelope>({
       id: "evt_5",
       ts: "2026-07-03T10:00:04Z",
