@@ -10,16 +10,19 @@ files; ontology.yaml + events.jsonl are the durable state).
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import shutil
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Literal
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
@@ -605,3 +608,13 @@ async def list_scenarios() -> dict[str, Any]:
 @app.get("/api/ontology/export")
 async def ontology_export() -> FileResponse:
     return FileResponse(onto_mod.ONTOLOGY_PATH, media_type="application/x-yaml", filename="ontology.yaml")
+
+
+# Production (the GHCR image) serves the built board from this same process, so
+# the frontend's relative /api/... calls are same-origin and no proxy or CORS is
+# involved. In dev the directory does not exist and Vite serves the board
+# instead — hence the guard rather than an unconditional mount. Mounted last so
+# it can never shadow an /api route.
+_STATIC_DIR = Path(os.getenv("FOUNDRY_STATIC_DIR", "frontend/dist"))
+if (_STATIC_DIR / "index.html").is_file():
+    app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="board")
