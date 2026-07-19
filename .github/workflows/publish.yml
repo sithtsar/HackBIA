@@ -63,6 +63,11 @@ jobs:
           IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
         run: |
           set -euo pipefail
+          # github.repository keeps the repo's original casing (sithtsar/HackBIA)
+          # but docker refuses a reference with uppercase in it. metadata-action
+          # lowercases for us, so push succeeds and only this hand-rolled ref
+          # blows up — with exit 125 and no message that names the cause.
+          IMAGE="$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')"
           docker run -d --name smoke -p 8400:8400 "$IMAGE"
           # Boot includes a DuckDB seed, so allow ~90s before calling it dead.
           curl -fsS --retry 45 --retry-delay 2 --retry-all-errors \
