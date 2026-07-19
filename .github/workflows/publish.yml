@@ -1,0 +1,72 @@
+name: Publish image
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # :latest tracks main; :v1.2.3 and :sha-abc1234 give pinnable refs.
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # GHA cache keeps the bun install and uv sync layers warm between runs.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Proves the published image actually boots and serves the board, so a
+      # broken :latest is caught here instead of in prod.
+      - name: Smoke test the pushed image
+        env:
+          # Pinned by digest — the exact artifact just pushed, not a tag that
+          # another run could have moved underneath us.
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker run -d --name smoke -p 8400:8400 "$IMAGE"
+          # Boot includes a DuckDB seed, so allow ~90s before calling it dead.
+          curl -fsS --retry 45 --retry-delay 2 --retry-all-errors \
+            http://localhost:8400/api/state | head -c 200
+          # The board itself must be served by the same process.
+          curl -fsS -o /dev/null http://localhost:8400/
+          docker rm -f smoke
