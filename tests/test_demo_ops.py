@@ -40,12 +40,27 @@ def _isolate(tmp_path, monkeypatch):
     main._produces_edges.clear()
     main._term_nodes.clear()
     main._term_edges.clear()
+    main._workflows.clear()
+    main._active_workflow_id = None
 
     yield onto_path, baseline_path, events_path
 
 
 def _client():
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://test")
+
+
+async def _settle(predicate, timeout=5.0):
+    """Wait for a background replay to reach a state instead of guessing at it
+    with a fixed sleep. The replay runs as a task, so a hardcoded delay is a
+    race: it passed locally until a cold DuckDB seed pushed the run past the
+    deadline and the assertion saw 1 of 43 events."""
+    deadline = asyncio.get_event_loop().time() + timeout
+    while asyncio.get_event_loop().time() < deadline:
+        if predicate():
+            return True
+        await asyncio.sleep(0.01)
+    return predicate()
 
 
 def test_reset_rebuilds_seed_restores_baseline_clears_state_emits_event(_isolate):
@@ -119,7 +134,7 @@ def test_replay_resets_state_before_reemitting(_isolate):
             q = main.bus.subscribe()
             # reset defaults to true — no body override needed.
             r = await c.post("/api/replay", json={"speed": 1000})
-            await asyncio.sleep(0.3)  # let the fast background replay finish
+            await _settle(lambda: q.qsize() >= 43)
             n = q.qsize()
             main.bus.unsubscribe(q)
             return r, n
@@ -142,6 +157,30 @@ def test_replay_resets_state_before_reemitting(_isolate):
     assert "e_derives_m_stale_orders" not in main._term_edges
     assert len(main._actions) == 1
     assert set(main._term_nodes) == {"obj_customer", "obj_order", "obj_ticket", "m_active_customer"}
+
+
+def test_replay_activates_workflow_so_ask_joins_it(_isolate, monkeypatch):
+    """Replay reaches workflows only through the event listener, never through
+    _create_workflow. If the listener leaves _active_workflow_id unset, the
+    first question after a replay forks a second workflow and the demo's
+    lineage splits in two — the no-API-key path breaks exactly where it is
+    meant to shine."""
+    monkeypatch.setattr(main.agents, "run_ask", lambda *a, **kw: asyncio.sleep(0))
+
+    async def run():
+        async with _client() as c:
+            await c.post("/api/replay", json={"speed": 1000})
+            await _settle(lambda: main._active_workflow_id is not None)
+            active_after_replay = main._active_workflow_id
+            await c.post("/api/ask", json={"question": "why did tickets spike?"})
+            return active_after_replay
+
+    active_after_replay = asyncio.run(run())
+
+    assert active_after_replay == "wf_demo001"
+    # the ask joined the replayed workflow instead of forking a new one
+    assert list(main._workflows) == ["wf_demo001"]
+    assert len(main._workflows["wf_demo001"]["run_ids"]) == 1
 
 
 def test_ontology_export_returns_yaml_file(_isolate):
