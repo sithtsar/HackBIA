@@ -23,6 +23,7 @@ A Palantir-Foundry-inspired live ops board. Built for the EPAM *Being AI-Native 
 10. [Design decisions](#design-decisions)
 11. [Repo layout](#repo-layout)
 12. [Demo video](#demo-video)
+13. [Packaging for a fresh GitLab repo](#packaging-for-a-fresh-gitlab-repo)
 
 ---
 
@@ -264,3 +265,33 @@ bunx remotion render src/index.ts DemoVideo out/demo.mp4
 ```
 
 The rendered `out/demo.mp4` and the raw `raw/*.webm` captures are gitignored (large binaries). Re-capture footage against a running board with `frontend/capture.mjs`. Full pipeline docs: [`video/README.md`](video/README.md).
+
+---
+
+## Packaging for a fresh GitLab repo
+
+To upload this to GitLab as a **single initial commit with no prior git history**, snapshot only the tracked files and re-init. `git archive` exports exactly what is committed at `HEAD` — so `.env`, `node_modules/`, `foundry.duckdb`, `events.jsonl`, and the video artifacts are all excluded automatically (they're gitignored and untracked), while `.gitignore`, `.env.example`, `baml_client/`, and the `video/public/raw` symlink are preserved.
+
+```bash
+# from the repo root, on the branch you want to snapshot
+DEST=../foundry-lite-gitlab
+git archive HEAD --prefix=foundry-lite-gitlab/ | (cd .. && tar -x)
+
+cd "$DEST"
+git init -b main
+git add .
+git commit -m "Initial commit: Foundry-Lite"
+
+git remote add origin git@gitlab.com:<group>/<project>.git   # your GitLab repo
+git push -u origin main
+```
+
+The result has **one commit** and no trace of the original history.
+
+> **Before pushing, confirm no secret ships in a tracked file.** Stripping history does *not* remove a key committed inside a file. This repo has been checked (keys live only in the gitignored `.env`; `.env.example` holds placeholders), but re-verify if you've committed anything since:
+> ```bash
+> git archive HEAD | tar -xO | grep -aoE 'sk-[A-Za-z0-9]{20,}|csk-[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}'
+> ```
+> Empty output = clean.
+
+*Alternative (no temp dir):* `git checkout --orphan gitlab-main && git commit -m "Initial commit"` also produces a single-commit branch — but `git add -A` on it can pull in untracked files (a stray `.env`, `node_modules`), so the `git archive` route above is safer.
