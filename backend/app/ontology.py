@@ -13,6 +13,8 @@ Join edges reuse the join's own id.
 """
 from __future__ import annotations
 
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -50,8 +52,18 @@ def load_ontology(path: Path = ONTOLOGY_PATH) -> dict[str, Any]:
 
 
 def save_ontology(onto: dict[str, Any], path: Path = ONTOLOGY_PATH) -> None:
-    with open(path, "w") as f:
-        yaml.safe_dump(onto, f, sort_keys=False)
+    # Write-then-rename so a concurrent load_ontology() (GET /api/state is
+    # polled every ~300ms during a draft) never observes a truncated file --
+    # plain open(path, "w") truncates before the new content is written,
+    # and yaml.safe_load(empty file) returns None, crashing get_state.
+    fd, tmp_path = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(fd, "w") as f:
+            yaml.safe_dump(onto, f, sort_keys=False)
+        os.replace(tmp_path, path)
+    except BaseException:
+        os.unlink(tmp_path)
+        raise
 
 
 def set_term_status(onto: dict[str, Any], term_id: str, status: str) -> bool:

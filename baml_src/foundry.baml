@@ -64,6 +64,18 @@ function AskQuestion(question: string, approved_terms_json: string, schema_and_s
     referencing only real tables/columns. terms_used lists the ids of the
     ontology terms you relied on.
 
+    If the question asks about a RATE, SPIKE, SHARE, or which group is the
+    biggest "driver" of an outcome, a raw COUNT or SUM GROUP BY is misleading:
+    the group with the most occurrences is often just the group with the most
+    volume overall, not the one behaving disproportionately. Compute a rate —
+    the share of a group's own rows that meet the condition, not the group's
+    share of all matching rows — for example:
+      COUNT(*) FILTER (WHERE <condition>) * 1.0 / NULLIF(COUNT(*), 0) AS rate
+    grouped by the relevant dimension, so each group is compared against its
+    own volume. Guard against spurious 100% rates on tiny groups by requiring
+    a minimum group size (e.g. HAVING COUNT(*) >= 5) or by also selecting the
+    group's row count alongside the rate so the caller can judge reliability.
+
     {{ _.role("user") }}
     Question: {{ question }}
 

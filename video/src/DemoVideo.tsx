@@ -1,8 +1,11 @@
 import React from "react";
-import { Series } from "remotion";
+import { AbsoluteFill } from "remotion";
+import { TransitionSeries, linearTiming } from "@remotion/transitions";
+import { fade } from "@remotion/transitions/fade";
 import { TitleCard } from "./compositions/TitleCard";
 import { Outro } from "./compositions/Outro";
 import { ScenarioScene } from "./compositions/ScenarioScene";
+import { ProgressBar } from "./components/ProgressBar";
 import { captions } from "./captions";
 import type { ScenarioMeta } from "./scenarios";
 
@@ -19,27 +22,51 @@ export type DemoVideoProps = {
   scenes: readonly DemoVideoScene[];
 };
 
-/** The deliverable: title card -> one scene per scenario -> outro, back to back. */
+// A crossfade at every act boundary instead of a hard cut. Each TransitionSeries.Sequence
+// still gets its own full local frame range (0..durationInFrames-1) — captions and Ken Burns
+// key off that local frame, so overlapping the boundary does NOT desync them. What it does
+// change: the total assembled video is shorter than the sum of the scene durations, by
+// TRANSITION_FRAMES per boundary (4 boundaries here) — Root.tsx's DemoVideo composition
+// duration accounts for that explicitly so playback doesn't run past the real content.
+export const TRANSITION_FRAMES = 15;
+
+const transition = () => (
+  <TransitionSeries.Transition
+    presentation={fade()}
+    timing={linearTiming({ durationInFrames: TRANSITION_FRAMES })}
+  />
+);
+
+/** The deliverable: title card -> one scene per scenario -> outro, crossfading at each cut. */
 export const DemoVideo: React.FC<DemoVideoProps> = ({
   titleDurationInFrames,
   outroDurationInFrames,
   scenes,
 }) => (
-  <Series>
-    <Series.Sequence durationInFrames={titleDurationInFrames}>
-      <TitleCard />
-    </Series.Sequence>
-    {scenes.map((scene) => (
-      <Series.Sequence key={scene.scenario.id} durationInFrames={scene.durationInFrames}>
-        <ScenarioScene
-          scenario={scene.scenario}
-          footageExists={scene.footageExists}
-          captions={captions[scene.scenario.id]}
-        />
-      </Series.Sequence>
-    ))}
-    <Series.Sequence durationInFrames={outroDurationInFrames}>
-      <Outro />
-    </Series.Sequence>
-  </Series>
+  <AbsoluteFill>
+    <TransitionSeries>
+      <TransitionSeries.Sequence durationInFrames={titleDurationInFrames}>
+        <TitleCard />
+      </TransitionSeries.Sequence>
+      {transition()}
+      {scenes.map((scene, i) => (
+        <React.Fragment key={scene.scenario.id}>
+          <TransitionSeries.Sequence durationInFrames={scene.durationInFrames}>
+            <ScenarioScene
+              scenario={scene.scenario}
+              footageExists={scene.footageExists}
+              captions={captions[scene.scenario.id]}
+              durationInFrames={scene.durationInFrames}
+            />
+          </TransitionSeries.Sequence>
+          {i < scenes.length - 1 ? transition() : null}
+        </React.Fragment>
+      ))}
+      {transition()}
+      <TransitionSeries.Sequence durationInFrames={outroDurationInFrames}>
+        <Outro />
+      </TransitionSeries.Sequence>
+    </TransitionSeries>
+    <ProgressBar />
+  </AbsoluteFill>
 );

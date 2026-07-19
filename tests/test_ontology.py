@@ -1,4 +1,4 @@
-from backend.app.ontology import ONTOLOGY_PATH, build_graph, load_ontology, set_term_status, terms_from_ontology
+from backend.app.ontology import ONTOLOGY_PATH, build_graph, load_ontology, save_ontology, set_term_status, terms_from_ontology
 
 
 def test_baseline_yaml_loads():
@@ -48,3 +48,17 @@ def test_set_term_status_mutates_and_persists(tmp_path):
 
     missing = set_term_status(onto, "nope_not_a_real_id", "approved")
     assert missing is False
+
+
+def test_save_ontology_is_atomic(tmp_path):
+    # save_ontology writes via tempfile+os.replace so a reader can never
+    # observe a truncated/missing file mid-write (was a plain open(path, "w"),
+    # which truncates before the new content lands -- a GET /api/state poll
+    # racing an in-progress draft's save could hit an empty file and 500).
+    tmp_yaml = tmp_path / "ontology.yaml"
+    onto = load_ontology(ONTOLOGY_PATH)
+    save_ontology(onto, tmp_yaml)
+    assert tmp_yaml.exists()
+    assert tmp_yaml.stat().st_size > 0
+    assert load_ontology(tmp_yaml) == onto
+    assert list(tmp_path.iterdir()) == [tmp_yaml]  # no leftover temp file

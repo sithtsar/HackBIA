@@ -174,10 +174,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    // applyEvent only ever calls stable useState setters (several via the
-    // functional-update form), so the render-1 closure captured here stays
-    // correct for the app's lifetime — no need to reconnect on every render.
-    return connectEvents({ onEvent: applyEvent, onStatus: setConnectionStatus });
+    // applyEvent/refetch only ever call stable useState setters (several via
+    // the functional-update form) or the stable fetchState import, so the
+    // render-1 closure captured here stays correct for the app's lifetime —
+    // no need to reconnect on every render.
+    //
+    // onReconnect re-fetches GET /api/state: the backend keeps no per-client
+    // event buffer (see sse.ts), so anything published while the stream was
+    // down is otherwise lost forever and the board goes silently stale.
+    return connectEvents({
+      onEvent: applyEvent,
+      onStatus: setConnectionStatus,
+      onReconnect: () => void refetch(),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

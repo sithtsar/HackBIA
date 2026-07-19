@@ -8,6 +8,16 @@ const BACKOFF_CAP_MS = 5000;
 type SseHandlers = {
   onEvent: (envelope: EventEnvelope) => void;
   onStatus: (status: ConnectionStatus) => void;
+  /**
+   * Fired when the stream reopens after a prior connection was torn down.
+   * The backend has no Last-Event-ID / replay support (see /api/events in
+   * backend/app/main.py — a fresh asyncio.Queue per subscribe, nothing
+   * buffered), so any events published during the gap are gone for good.
+   * The caller should re-fetch full state to heal, since store.ts only
+   * fetches GET /api/state once on mount and reduces incrementally after.
+   * Not called for the initial connect.
+   */
+  onReconnect: () => void;
 };
 
 /**
@@ -16,21 +26,25 @@ type SseHandlers = {
  * isn't configurable from JS, so the source is closed + recreated here to
  * get the 1s -> 5s backoff the ops board wants. Returns a cleanup function.
  */
-export function connectEvents({ onEvent, onStatus }: SseHandlers): () => void {
+export function connectEvents({ onEvent, onStatus, onReconnect }: SseHandlers): () => void {
   let source: EventSource | null = null;
   let backoff = BACKOFF_START_MS;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let stopped = false;
+  let connectCount = 0;
 
   const isOffline = () => typeof navigator !== "undefined" && navigator.onLine === false;
 
   const connect = () => {
     if (stopped) return;
+    connectCount += 1;
+    const isReconnect = connectCount > 1;
     source = new EventSource("/api/events");
 
     source.onopen = () => {
       backoff = BACKOFF_START_MS;
       onStatus("connected");
+      if (isReconnect) onReconnect();
     };
 
     source.onmessage = (ev) => {

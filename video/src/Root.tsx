@@ -3,7 +3,7 @@ import { Composition, type AnyZodObject } from "remotion";
 import { TitleCard } from "./compositions/TitleCard";
 import { Outro } from "./compositions/Outro";
 import { ScenarioScene, type ScenarioSceneProps } from "./compositions/ScenarioScene";
-import { DemoVideo, type DemoVideoProps } from "./DemoVideo";
+import { DemoVideo, type DemoVideoProps, TRANSITION_FRAMES } from "./DemoVideo";
 import { captions } from "./captions";
 import { SCENARIOS, sceneDurationMs, msToFrames, BOOKEND_MIN_MS } from "./scenarios";
 import { footageExists } from "./footage";
@@ -56,6 +56,7 @@ export const RemotionRoot: React.FC = () => {
             scenario,
             footageExists: false,
             captions: captions[scenario.id],
+            durationInFrames: sceneDurationsInFrames[i] ?? msToFrames(durationMs, FPS),
           }}
           calculateMetadata={async ({ props }) => ({
             props: { ...props, footageExists: await footageExists(scenario.footageFile) },
@@ -75,8 +76,14 @@ export const RemotionRoot: React.FC = () => {
       <Composition<AnyZodObject, DemoVideoProps>
         id="DemoVideo"
         component={DemoVideo}
+        // Crossfades overlap adjacent sequences, so the assembled video is shorter than the
+        // sum of its parts by one TRANSITION_FRAMES per act boundary (scenes.length + 1 of
+        // them: title->scene, scene->scene, scene->outro). See the note in DemoVideo.tsx.
         durationInFrames={
-          titleDurationInFrames + sceneDurationsInFrames.reduce((a, b) => a + b, 0) + outroDurationInFrames
+          titleDurationInFrames +
+          sceneDurationsInFrames.reduce((a, b) => a + b, 0) +
+          outroDurationInFrames -
+          (scenes.length + 1) * TRANSITION_FRAMES
         }
         fps={FPS}
         width={WIDTH}

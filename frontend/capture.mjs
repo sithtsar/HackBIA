@@ -136,10 +136,41 @@ async function waitForQuiescence({ timeout = 90000, stableFor = 6000, interval =
       lastKey = key;
       lastChangeAt = Date.now();
     }
-    if (Date.now() - lastChangeAt >= stableFor) return state;
+    if (Date.now() - lastChangeAt >= stableFor) {
+      await fitViewIfGrown(state);
+      return state;
+    }
     if (Date.now() - start > timeout) throw new Error(`timed out waiting for ${label} to settle`);
     await sleep(interval);
   }
+}
+
+// --- viewport fit ---------------------------------------------------------
+// Canvas.tsx's calm viewport (frontend/src/components/Canvas.tsx) never
+// moves the camera on its own: new nodes surface a "N new · fit view" chip
+// (NewNodesChip, bottom-center) for a human to click, or accept a
+// `foundry:fit` window event (FitOnEvent). This harness has no human in it,
+// so once a burst of new nodes has landed and settled -- i.e. right where
+// waitForQuiescence's poll loop above already detects stability, not on
+// every single mutation -- drive the same path a human would: click the
+// chip when it's showing (a real user gesture, visible in the footage as
+// intentional), else dispatch the event when the node count grew without a
+// chip appearing (e.g. the growth was already inside the viewport).
+// fitView animates over 250ms; the sleep below outlasts that before the
+// next action starts.
+let lastFitNodeCount = 0;
+async function fitViewIfGrown(state) {
+  if (state.graph.nodes.length <= lastFitNodeCount) return;
+  lastFitNodeCount = state.graph.nodes.length;
+  const chip = page.getByRole("button", { name: /new · fit view/ });
+  if (await chip.isVisible().catch(() => false)) {
+    await chip.click();
+    beat("fit_view:chip");
+  } else {
+    await page.evaluate(() => window.dispatchEvent(new Event("foundry:fit")));
+    beat("fit_view:event");
+  }
+  await sleep(400);
 }
 
 // Approve pending subjects one at a time with a visible gap between clicks
@@ -181,6 +212,10 @@ page.on("pageerror", (e) => console.log("PAGEERROR:", e.message));
 await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
 await sleep(2500);
 beat("board_loaded");
+// Baseline for fitViewIfGrown: the nodes present at mount are already
+// framed by ReactFlow's own `fitView` prop, so only count nodes added
+// after this point as a "burst" worth fitting for.
+lastFitNodeCount = (await fetchState()).graph.nodes.length;
 
 if (scenario === "retail") {
   // Already reset above; skip /api/replay's own reset:true so it doesn't
