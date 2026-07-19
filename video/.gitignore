@@ -1,0 +1,8 @@
+node_modules
+# Anchored: an unanchored "raw" also matches public/raw, the symlink Remotion
+# resolves staticFile() through — losing it makes every scene render as
+# FOOTAGE MISSING with no obvious cause.
+/out
+/raw
+.DS_Store
+*.local

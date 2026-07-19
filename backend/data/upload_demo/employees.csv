@@ -1,0 +1,351 @@
+id,name,department,title,location,hire_date,manager_id
+emp_0001,Taylor Nguyen,people_ops,Manager,sf,2023-07-06,
+emp_0002,Jamie Kim,people_ops,Manager,remote,2020-02-22,
+emp_0003,Sam Torres,marketing,Manager,remote,2025-12-03,
+emp_0004,Sam Chen,sales,Manager,london,2019-07-05,
+emp_0005,Alex Scott,sales,Manager,bangalore,2020-02-23,
+emp_0006,Rowan Brown,marketing,Manager,london,2023-02-20,
+emp_0007,Alex Johnson,people_ops,Manager,austin,2022-06-11,
+emp_0008,Drew Kim,sales,Manager,sf,2025-02-10,
+emp_0009,Sam Lewis,engineering,Manager,sf,2022-05-27,
+emp_0010,Sage Davis,engineering,Manager,bangalore,2021-02-08,
+emp_0011,Finley Garcia,marketing,Manager,remote,2020-01-25,
+emp_0012,Avery Hill,support,Manager,london,2024-02-07,
+emp_0013,Sam Smith,people_ops,Manager,nyc,2023-01-05,
+emp_0014,Sam Brown,engineering,Manager,austin,2023-02-21,
+emp_0015,Quinn Clark,sales,Manager,sf,2022-04-10,
+emp_0016,Riley Davis,people_ops,Associate,london,2024-05-04,emp_0009
+emp_0017,Jamie Johnson,marketing,Manager,sf,2020-01-05,emp_0004
+emp_0018,Cameron Smith,sales,Associate,sf,2021-10-04,emp_0005
+emp_0019,Sam Chen,finance,Lead,nyc,2020-08-29,emp_0007
+emp_0020,Quinn Kim,support,Senior Associate,nyc,2019-12-18,emp_0009
+emp_0021,Drew Torres,marketing,Principal,austin,2022-03-14,emp_0004
+emp_0022,Morgan Wright,marketing,Associate,remote,2025-01-10,emp_0003
+emp_0023,Casey Walker,finance,Associate,austin,2021-12-23,emp_0010
+emp_0024,Quinn Wright,support,Principal,remote,2024-12-21,emp_0011
+emp_0025,Finley Davis,people_ops,Lead,remote,2022-12-19,emp_0007
+emp_0026,Casey Young,engineering,Lead,london,2024-04-03,emp_0009
+emp_0027,Taylor Lopez,people_ops,Principal,london,2024-01-11,emp_0003
+emp_0028,Reese Johnson,finance,Principal,remote,2019-07-17,emp_0006
+emp_0029,Elliot Nguyen,engineering,Lead,sf,2023-07-29,emp_0001
+emp_0030,Jamie Torres,engineering,Associate,bangalore,2020-10-22,emp_0014
+emp_0031,Sam Scott,sales,Senior Associate,bangalore,2020-12-05,emp_0009
+emp_0032,Casey Davis,finance,Principal,austin,2023-11-19,emp_0015
+emp_0033,Finley Chen,people_ops,Lead,austin,2022-01-26,emp_0008
+emp_0034,Harper Young,engineering,Senior Associate,nyc,2025-07-16,emp_0006
+emp_0035,Alex Torres,finance,Senior Associate,london,2023-10-15,emp_0001
+emp_0036,Sam Smith,sales,Associate,remote,2022-07-21,emp_0002
+emp_0037,Harper Brown,support,Manager,nyc,2020-03-18,emp_0003
+emp_0038,Blake Torres,marketing,Senior Associate,austin,2021-09-10,emp_0004
+emp_0039,Taylor Garcia,people_ops,Manager,sf,2021-07-05,emp_0007
+emp_0040,Quinn Smith,people_ops,Associate,remote,2021-09-28,emp_0012
+emp_0041,Cameron Garcia,sales,Senior Associate,nyc,2020-03-30,emp_0008
+emp_0042,Morgan Walker,sales,Lead,austin,2023-06-16,emp_0014
+emp_0043,Sam Young,finance,Associate,remote,2020-03-12,emp_0014
+emp_0044,Alex Patel,sales,Senior Associate,austin,2020-10-23,emp_0008
+emp_0045,Riley Lewis,engineering,Senior Associate,austin,2026-03-27,emp_0007
+emp_0046,Drew Young,support,Manager,bangalore,2020-01-10,emp_0011
+emp_0047,Elliot Kim,sales,Lead,nyc,2025-08-08,emp_0010
+emp_0048,Finley Smith,people_ops,Lead,remote,2025-09-11,emp_0010
+emp_0049,Elliot Wright,finance,Senior Associate,remote,2020-07-24,emp_0002
+emp_0050,Casey Patel,finance,Associate,bangalore,2023-08-15,emp_0007
+emp_0051,Taylor Torres,sales,Principal,london,2025-10-24,emp_0010
+emp_0052,Sam Walker,people_ops,Principal,london,2020-05-24,emp_0006
+emp_0053,Drew Chen,people_ops,Lead,nyc,2023-04-13,emp_0007
+emp_0054,Morgan Lopez,marketing,Lead,remote,2026-02-25,emp_0008
+emp_0055,Sage Torres,engineering,Associate,london,2023-11-13,emp_0009
+emp_0056,Drew Kim,support,Associate,nyc,2022-02-11,emp_0005
+emp_0057,Casey Young,finance,Lead,london,2020-04-29,emp_0001
+emp_0058,Finley Lopez,people_ops,Associate,nyc,2023-04-17,emp_0002
+emp_0059,Taylor Scott,sales,Lead,sf,2019-06-23,emp_0004
+emp_0060,Cameron Chen,people_ops,Lead,london,2020-10-11,emp_0005
+emp_0061,Jordan Patel,people_ops,Manager,sf,2025-10-06,emp_0001
+emp_0062,Cameron Kim,people_ops,Lead,nyc,2021-04-21,emp_0009
+emp_0063,Rowan Scott,engineering,Associate,remote,2024-08-02,emp_0009
+emp_0064,Jordan Clark,finance,Principal,nyc,2021-06-09,emp_0003
+emp_0065,Jordan Lopez,support,Associate,sf,2023-11-26,emp_0011
+emp_0066,Jamie Garcia,support,Principal,austin,2024-07-10,emp_0015
+emp_0067,Jamie Johnson,sales,Manager,remote,2024-03-31,emp_0012
+emp_0068,Cameron Walker,people_ops,Senior Associate,sf,2024-06-21,emp_0013
+emp_0069,Taylor Lewis,engineering,Manager,nyc,2024-01-08,emp_0014
+emp_0070,Quinn Clark,support,Senior Associate,nyc,2025-12-29,emp_0011
+emp_0071,Riley Lewis,support,Lead,remote,2023-02-16,emp_0006
+emp_0072,Harper Lewis,people_ops,Principal,sf,2025-12-12,emp_0002
+emp_0073,Drew Johnson,finance,Lead,remote,2025-01-15,emp_0010
+emp_0074,Rowan Clark,people_ops,Lead,austin,2019-06-17,emp_0009
+emp_0075,Taylor Lewis,finance,Senior Associate,sf,2025-10-05,emp_0012
+emp_0076,Rowan Nguyen,finance,Principal,bangalore,2024-01-18,emp_0006
+emp_0077,Rowan Patel,people_ops,Lead,london,2022-09-27,emp_0011
+emp_0078,Taylor Lopez,finance,Lead,bangalore,2021-09-05,emp_0006
+emp_0079,Skyler Lopez,finance,Senior Associate,nyc,2021-07-17,emp_0011
+emp_0080,Skyler Johnson,finance,Principal,sf,2021-09-14,emp_0009
+emp_0081,Alex Lopez,support,Senior Associate,austin,2019-10-03,emp_0010
+emp_0082,Cameron Young,marketing,Manager,bangalore,2023-11-11,emp_0009
+emp_0083,Elliot Johnson,people_ops,Associate,sf,2020-06-23,emp_0011
+emp_0084,Sage Martin,engineering,Senior Associate,bangalore,2022-10-11,emp_0004
+emp_0085,Riley Kim,engineering,Associate,nyc,2020-12-05,emp_0010
+emp_0086,Sam Young,marketing,Principal,nyc,2021-12-14,emp_0008
+emp_0087,Skyler Brown,sales,Associate,remote,2021-06-28,emp_0004
+emp_0088,Casey Wright,marketing,Associate,london,2023-06-19,emp_0015
+emp_0089,Taylor Young,sales,Manager,bangalore,2020-04-20,emp_0009
+emp_0090,Sage Martin,marketing,Principal,bangalore,2020-08-06,emp_0007
+emp_0091,Finley Young,sales,Manager,austin,2023-05-09,emp_0013
+emp_0092,Jamie Davis,finance,Manager,bangalore,2023-07-30,emp_0005
+emp_0093,Quinn Patel,people_ops,Lead,nyc,2023-03-19,emp_0006
+emp_0094,Cameron Scott,engineering,Senior Associate,nyc,2023-08-31,emp_0007
+emp_0095,Morgan Chen,engineering,Manager,austin,2022-07-19,emp_0009
+emp_0096,Quinn Walker,engineering,Senior Associate,austin,2021-11-21,emp_0015
+emp_0097,Blake Nguyen,finance,Manager,austin,2026-03-11,emp_0006
+emp_0098,Avery Lewis,marketing,Principal,bangalore,2020-02-19,emp_0013
+emp_0099,Sage Brown,marketing,Senior Associate,sf,2021-05-15,emp_0008
+emp_0100,Alex Lewis,support,Manager,bangalore,2024-05-28,emp_0014
+emp_0101,Quinn Kim,finance,Principal,remote,2021-11-03,emp_0010
+emp_0102,Blake Nguyen,engineering,Manager,nyc,2021-01-29,emp_0003
+emp_0103,Jordan Davis,marketing,Lead,nyc,2021-02-27,emp_0006
+emp_0104,Cameron Lewis,support,Manager,sf,2025-05-04,emp_0008
+emp_0105,Alex Scott,engineering,Lead,nyc,2025-06-27,emp_0013
+emp_0106,Jordan Nguyen,sales,Senior Associate,remote,2024-07-19,emp_0004
+emp_0107,Morgan King,people_ops,Associate,london,2023-10-25,emp_0008
+emp_0108,Drew Clark,sales,Principal,london,2024-12-21,emp_0013
+emp_0109,Casey Lopez,engineering,Principal,remote,2022-10-05,emp_0010
+emp_0110,Skyler Lewis,people_ops,Senior Associate,remote,2019-08-14,emp_0012
+emp_0111,Jamie Garcia,people_ops,Lead,bangalore,2019-07-11,emp_0013
+emp_0112,Taylor Torres,engineering,Lead,london,2021-06-15,emp_0011
+emp_0113,Reese Patel,finance,Lead,remote,2021-07-19,emp_0014
+emp_0114,Elliot Garcia,marketing,Lead,bangalore,2021-02-06,emp_0012
+emp_0115,Morgan Walker,sales,Principal,bangalore,2023-03-25,emp_0010
+emp_0116,Finley King,marketing,Manager,bangalore,2019-08-13,emp_0005
+emp_0117,Cameron Brown,engineering,Lead,austin,2023-07-11,emp_0013
+emp_0118,Quinn Torres,finance,Manager,sf,2025-12-08,emp_0008
+emp_0119,Cameron Johnson,marketing,Senior Associate,sf,2023-05-12,emp_0006
+emp_0120,Drew Hill,people_ops,Lead,london,2026-02-22,emp_0009
+emp_0121,Riley Patel,sales,Manager,austin,2020-01-12,emp_0013
+emp_0122,Jamie King,people_ops,Manager,austin,2026-01-24,emp_0002
+emp_0123,Avery Brown,marketing,Senior Associate,sf,2019-09-26,emp_0006
+emp_0124,Elliot Scott,finance,Lead,austin,2020-02-01,emp_0006
+emp_0125,Reese Young,support,Lead,sf,2023-09-03,emp_0002
+emp_0126,Riley Martin,engineering,Principal,bangalore,2024-03-07,emp_0004
+emp_0127,Riley King,support,Principal,london,2019-07-26,emp_0005
+emp_0128,Taylor Chen,support,Senior Associate,sf,2024-03-31,emp_0005
+emp_0129,Alex Scott,sales,Lead,remote,2025-08-24,emp_0009
+emp_0130,Avery Kim,people_ops,Manager,remote,2026-02-13,emp_0010
+emp_0131,Avery King,marketing,Manager,sf,2024-03-10,emp_0001
+emp_0132,Drew King,engineering,Associate,austin,2020-09-28,emp_0002
+emp_0133,Blake Smith,sales,Senior Associate,london,2022-11-07,emp_0002
+emp_0134,Jamie Garcia,finance,Manager,london,2019-07-29,emp_0013
+emp_0135,Sage Brown,finance,Manager,austin,2021-04-17,emp_0005
+emp_0136,Blake Walker,support,Principal,london,2025-08-01,emp_0010
+emp_0137,Taylor Chen,people_ops,Senior Associate,sf,2025-05-07,emp_0003
+emp_0138,Jamie Johnson,finance,Associate,nyc,2026-03-25,emp_0007
+emp_0139,Quinn Hill,marketing,Lead,remote,2023-08-30,emp_0005
+emp_0140,Avery Young,engineering,Senior Associate,sf,2019-08-24,emp_0011
+emp_0141,Riley Walker,engineering,Principal,nyc,2024-08-02,emp_0015
+emp_0142,Drew Kim,engineering,Associate,nyc,2022-10-23,emp_0010
+emp_0143,Blake Lopez,marketing,Associate,austin,2022-11-06,emp_0012
+emp_0144,Skyler Davis,finance,Principal,austin,2021-05-07,emp_0002
+emp_0145,Sage Smith,marketing,Lead,london,2023-06-14,emp_0001
+emp_0146,Sam Brown,people_ops,Principal,london,2026-01-10,emp_0013
+emp_0147,Drew Torres,engineering,Senior Associate,austin,2020-06-09,emp_0011
+emp_0148,Quinn Davis,sales,Principal,austin,2020-09-28,emp_0002
+emp_0149,Elliot Clark,marketing,Lead,sf,2025-01-31,emp_0014
+emp_0150,Casey Martin,marketing,Manager,sf,2021-10-07,emp_0014
+emp_0151,Finley Smith,marketing,Associate,sf,2023-06-06,emp_0006
+emp_0152,Taylor Lewis,finance,Associate,bangalore,2020-03-04,emp_0008
+emp_0153,Rowan Smith,sales,Principal,sf,2020-09-01,emp_0011
+emp_0154,Quinn Smith,sales,Lead,london,2024-10-15,emp_0015
+emp_0155,Avery Young,people_ops,Manager,remote,2025-12-07,emp_0011
+emp_0156,Sage Brown,people_ops,Senior Associate,sf,2020-01-30,emp_0001
+emp_0157,Finley Walker,engineering,Senior Associate,remote,2021-01-30,emp_0002
+emp_0158,Morgan King,people_ops,Lead,london,2023-03-12,emp_0007
+emp_0159,Elliot King,sales,Manager,london,2024-08-20,emp_0007
+emp_0160,Riley Hill,finance,Senior Associate,remote,2023-02-28,emp_0013
+emp_0161,Rowan Martin,finance,Lead,remote,2023-02-01,emp_0012
+emp_0162,Avery Torres,finance,Manager,nyc,2021-04-01,emp_0009
+emp_0163,Elliot Clark,support,Principal,london,2022-01-10,emp_0008
+emp_0164,Cameron Chen,people_ops,Senior Associate,london,2021-12-18,emp_0004
+emp_0165,Rowan Smith,support,Manager,bangalore,2021-12-25,emp_0007
+emp_0166,Morgan King,engineering,Senior Associate,london,2019-08-22,emp_0006
+emp_0167,Taylor Young,engineering,Principal,austin,2026-02-01,emp_0012
+emp_0168,Morgan Walker,people_ops,Senior Associate,remote,2020-12-28,emp_0013
+emp_0169,Drew Martin,finance,Manager,bangalore,2025-05-11,emp_0014
+emp_0170,Cameron Scott,marketing,Lead,bangalore,2020-10-14,emp_0014
+emp_0171,Finley Smith,finance,Associate,nyc,2023-01-13,emp_0004
+emp_0172,Sam Walker,engineering,Associate,austin,2024-05-23,emp_0012
+emp_0173,Avery Nguyen,engineering,Lead,remote,2022-12-20,emp_0006
+emp_0174,Reese Walker,sales,Senior Associate,london,2021-08-21,emp_0010
+emp_0175,Casey Johnson,sales,Associate,london,2021-12-20,emp_0010
+emp_0176,Jamie King,finance,Senior Associate,nyc,2021-02-01,emp_0011
+emp_0177,Drew Young,support,Associate,austin,2023-01-12,emp_0011
+emp_0178,Finley Johnson,engineering,Manager,sf,2019-09-02,emp_0005
+emp_0179,Rowan Davis,marketing,Lead,nyc,2021-12-11,emp_0014
+emp_0180,Elliot Garcia,sales,Manager,london,2022-03-26,emp_0010
+emp_0181,Avery Lopez,engineering,Manager,sf,2026-03-02,emp_0010
+emp_0182,Jordan Hill,people_ops,Manager,sf,2023-09-05,emp_0010
+emp_0183,Reese Brown,people_ops,Senior Associate,london,2023-06-13,emp_0011
+emp_0184,Morgan Garcia,people_ops,Associate,sf,2021-04-25,emp_0001
+emp_0185,Blake Clark,people_ops,Senior Associate,remote,2022-12-13,emp_0006
+emp_0186,Rowan Johnson,sales,Senior Associate,london,2022-02-26,emp_0009
+emp_0187,Harper Davis,sales,Lead,austin,2022-12-13,emp_0012
+emp_0188,Cameron Garcia,marketing,Associate,nyc,2023-09-23,emp_0014
+emp_0189,Skyler Scott,support,Associate,austin,2026-02-06,emp_0005
+emp_0190,Finley Garcia,marketing,Lead,bangalore,2023-04-27,emp_0010
+emp_0191,Skyler Clark,engineering,Senior Associate,austin,2025-12-23,emp_0010
+emp_0192,Finley Martin,finance,Senior Associate,bangalore,2025-07-20,emp_0011
+emp_0193,Quinn Lopez,people_ops,Manager,remote,2024-09-09,emp_0001
+emp_0194,Jordan Lopez,marketing,Associate,remote,2023-08-17,emp_0015
+emp_0195,Finley Kim,marketing,Manager,sf,2020-03-14,emp_0007
+emp_0196,Blake Kim,marketing,Associate,austin,2021-09-06,emp_0005
+emp_0197,Jordan Clark,sales,Manager,austin,2023-08-11,emp_0014
+emp_0198,Reese Garcia,people_ops,Lead,london,2022-03-27,emp_0001
+emp_0199,Skyler Davis,sales,Associate,austin,2025-03-25,emp_0011
+emp_0200,Riley Hill,engineering,Associate,sf,2023-07-12,emp_0003
+emp_0201,Blake Chen,engineering,Principal,nyc,2019-09-07,emp_0004
+emp_0202,Jamie Martin,sales,Principal,remote,2023-02-24,emp_0014
+emp_0203,Morgan Kim,finance,Lead,nyc,2025-01-09,emp_0011
+emp_0204,Alex Kim,engineering,Lead,nyc,2019-08-28,emp_0006
+emp_0205,Alex Johnson,support,Associate,nyc,2021-07-15,emp_0009
+emp_0206,Taylor Patel,marketing,Manager,sf,2020-07-02,emp_0010
+emp_0207,Taylor Young,finance,Senior Associate,london,2025-10-09,emp_0012
+emp_0208,Harper Lopez,marketing,Associate,remote,2020-11-20,emp_0014
+emp_0209,Skyler Walker,people_ops,Associate,austin,2021-04-14,emp_0002
+emp_0210,Sam Martin,finance,Senior Associate,remote,2024-11-04,emp_0005
+emp_0211,Sage Torres,finance,Lead,austin,2019-07-24,emp_0009
+emp_0212,Avery Young,finance,Principal,austin,2025-02-22,emp_0013
+emp_0213,Taylor Scott,people_ops,Senior Associate,austin,2021-03-12,emp_0015
+emp_0214,Jamie Walker,support,Manager,austin,2021-08-05,emp_0012
+emp_0215,Taylor Martin,marketing,Lead,bangalore,2023-05-26,emp_0006
+emp_0216,Morgan King,engineering,Associate,remote,2025-03-19,emp_0007
+emp_0217,Taylor Clark,sales,Principal,remote,2019-09-06,emp_0009
+emp_0218,Finley Martin,people_ops,Associate,austin,2022-04-17,emp_0014
+emp_0219,Rowan Smith,support,Principal,sf,2022-04-25,emp_0002
+emp_0220,Blake Wright,sales,Senior Associate,bangalore,2020-11-06,emp_0004
+emp_0221,Taylor Clark,finance,Lead,remote,2023-02-18,emp_0010
+emp_0222,Jamie Walker,finance,Principal,london,2020-01-06,emp_0001
+emp_0223,Sage Davis,engineering,Senior Associate,sf,2022-10-17,emp_0015
+emp_0224,Cameron Clark,engineering,Senior Associate,nyc,2019-11-28,emp_0011
+emp_0225,Skyler Patel,sales,Associate,remote,2020-04-23,emp_0004
+emp_0226,Skyler Walker,marketing,Lead,nyc,2022-02-09,emp_0005
+emp_0227,Cameron Torres,finance,Associate,remote,2024-07-06,emp_0003
+emp_0228,Sage Smith,people_ops,Associate,sf,2021-04-16,emp_0011
+emp_0229,Rowan King,finance,Manager,austin,2023-03-13,emp_0004
+emp_0230,Harper Garcia,support,Manager,remote,2023-01-30,emp_0011
+emp_0231,Blake King,finance,Lead,remote,2023-10-14,emp_0007
+emp_0232,Sage Smith,engineering,Senior Associate,sf,2023-11-21,emp_0013
+emp_0233,Morgan Davis,support,Lead,remote,2026-03-04,emp_0008
+emp_0234,Rowan Johnson,sales,Manager,london,2023-09-05,emp_0009
+emp_0235,Finley Clark,engineering,Manager,bangalore,2025-10-13,emp_0007
+emp_0236,Alex Young,engineering,Lead,london,2021-06-11,emp_0010
+emp_0237,Skyler Walker,support,Associate,austin,2026-01-09,emp_0006
+emp_0238,Casey Hill,marketing,Lead,remote,2021-05-12,emp_0014
+emp_0239,Taylor Brown,marketing,Principal,austin,2020-05-19,emp_0002
+emp_0240,Skyler Lopez,people_ops,Lead,nyc,2022-07-10,emp_0013
+emp_0241,Casey Patel,finance,Associate,london,2020-07-16,emp_0004
+emp_0242,Reese Clark,people_ops,Senior Associate,nyc,2025-02-07,emp_0003
+emp_0243,Drew Chen,sales,Principal,nyc,2025-05-31,emp_0003
+emp_0244,Elliot Young,finance,Principal,austin,2019-12-05,emp_0011
+emp_0245,Sage Martin,people_ops,Lead,nyc,2021-04-29,emp_0002
+emp_0246,Elliot Young,people_ops,Lead,sf,2019-08-17,emp_0001
+emp_0247,Reese Wright,engineering,Lead,austin,2021-03-10,emp_0001
+emp_0248,Jordan Clark,support,Associate,bangalore,2025-03-31,emp_0010
+emp_0249,Sage Wright,marketing,Manager,london,2020-01-16,emp_0013
+emp_0250,Jordan Young,finance,Senior Associate,sf,2019-06-22,emp_0008
+emp_0251,Harper Kim,engineering,Manager,remote,2022-05-29,emp_0012
+emp_0252,Sam Wright,people_ops,Senior Associate,remote,2023-06-25,emp_0012
+emp_0253,Quinn Young,finance,Principal,london,2024-06-23,emp_0006
+emp_0254,Reese Lopez,marketing,Manager,sf,2019-07-22,emp_0001
+emp_0255,Cameron Patel,support,Associate,london,2021-12-03,emp_0005
+emp_0256,Drew Hill,sales,Lead,remote,2019-09-22,emp_0011
+emp_0257,Morgan Clark,support,Manager,nyc,2019-08-02,emp_0012
+emp_0258,Sam Lopez,finance,Manager,bangalore,2022-07-29,emp_0014
+emp_0259,Morgan Wright,engineering,Manager,london,2022-03-14,emp_0001
+emp_0260,Reese Lopez,sales,Senior Associate,sf,2020-10-21,emp_0004
+emp_0261,Jamie Kim,sales,Associate,sf,2025-02-14,emp_0009
+emp_0262,Finley Wright,engineering,Lead,london,2024-10-15,emp_0010
+emp_0263,Skyler Kim,sales,Senior Associate,bangalore,2024-05-26,emp_0012
+emp_0264,Quinn Smith,marketing,Lead,bangalore,2023-08-06,emp_0008
+emp_0265,Sage Lopez,people_ops,Manager,nyc,2020-04-08,emp_0004
+emp_0266,Avery King,sales,Lead,bangalore,2019-11-11,emp_0008
+emp_0267,Quinn Lopez,marketing,Principal,london,2021-07-25,emp_0003
+emp_0268,Riley Hill,sales,Lead,remote,2020-11-13,emp_0014
+emp_0269,Reese Scott,engineering,Principal,remote,2023-01-23,emp_0002
+emp_0270,Casey Davis,marketing,Principal,nyc,2021-05-09,emp_0002
+emp_0271,Jamie Young,support,Associate,austin,2025-08-29,emp_0007
+emp_0272,Harper Clark,sales,Manager,remote,2022-01-20,emp_0004
+emp_0273,Alex Martin,engineering,Lead,nyc,2024-09-18,emp_0001
+emp_0274,Avery King,people_ops,Senior Associate,bangalore,2020-12-30,emp_0008
+emp_0275,Sage Nguyen,engineering,Associate,sf,2023-11-03,emp_0014
+emp_0276,Morgan Scott,people_ops,Principal,london,2021-07-06,emp_0002
+emp_0277,Avery Brown,support,Associate,remote,2023-08-02,emp_0007
+emp_0278,Sage Young,engineering,Associate,austin,2019-07-26,emp_0009
+emp_0279,Alex Wright,finance,Senior Associate,bangalore,2024-08-24,emp_0005
+emp_0280,Rowan Nguyen,finance,Lead,nyc,2019-11-10,emp_0007
+emp_0281,Casey Patel,finance,Lead,remote,2020-05-11,emp_0009
+emp_0282,Harper Wright,finance,Associate,austin,2020-12-26,emp_0001
+emp_0283,Skyler Clark,support,Associate,sf,2025-07-02,emp_0006
+emp_0284,Jamie Garcia,finance,Lead,nyc,2025-10-05,emp_0006
+emp_0285,Finley Martin,people_ops,Senior Associate,bangalore,2021-01-17,emp_0012
+emp_0286,Elliot Johnson,sales,Associate,bangalore,2021-02-15,emp_0001
+emp_0287,Avery Chen,engineering,Senior Associate,remote,2022-09-20,emp_0015
+emp_0288,Avery Wright,marketing,Principal,austin,2023-06-02,emp_0001
+emp_0289,Riley Lopez,support,Associate,bangalore,2022-07-15,emp_0005
+emp_0290,Taylor Clark,marketing,Manager,bangalore,2021-04-29,emp_0015
+emp_0291,Skyler Martin,sales,Manager,bangalore,2020-09-05,emp_0006
+emp_0292,Harper Davis,engineering,Manager,remote,2021-06-06,emp_0010
+emp_0293,Casey Scott,support,Lead,remote,2025-05-12,emp_0006
+emp_0294,Avery Lopez,marketing,Principal,bangalore,2021-06-24,emp_0003
+emp_0295,Quinn Clark,marketing,Associate,bangalore,2022-04-21,emp_0010
+emp_0296,Rowan Davis,people_ops,Associate,remote,2021-09-14,emp_0006
+emp_0297,Harper Johnson,engineering,Senior Associate,london,2021-05-06,emp_0001
+emp_0298,Morgan Patel,sales,Lead,sf,2021-12-18,emp_0010
+emp_0299,Jordan Hill,sales,Manager,sf,2022-02-01,emp_0008
+emp_0300,Sam Torres,sales,Principal,sf,2021-10-17,emp_0006
+emp_0301,Drew Brown,engineering,Associate,bangalore,2024-03-03,emp_0008
+emp_0302,Harper Lewis,finance,Associate,sf,2023-05-04,emp_0012
+emp_0303,Quinn Chen,finance,Lead,bangalore,2020-10-01,emp_0004
+emp_0304,Taylor Kim,engineering,Manager,nyc,2021-04-07,emp_0002
+emp_0305,Cameron Clark,people_ops,Associate,london,2020-03-06,emp_0005
+emp_0306,Avery Johnson,people_ops,Senior Associate,sf,2020-07-21,emp_0004
+emp_0307,Taylor Chen,sales,Senior Associate,austin,2025-12-18,emp_0006
+emp_0308,Finley Torres,support,Manager,london,2024-10-20,emp_0010
+emp_0309,Sam Patel,support,Manager,bangalore,2020-11-21,emp_0009
+emp_0310,Rowan Walker,finance,Associate,nyc,2022-09-14,emp_0011
+emp_0311,Sam Young,marketing,Principal,sf,2024-10-26,emp_0015
+emp_0312,Finley Torres,sales,Senior Associate,austin,2020-08-14,emp_0015
+emp_0313,Jordan Garcia,finance,Senior Associate,sf,2024-05-30,emp_0003
+emp_0314,Cameron Brown,support,Principal,sf,2025-05-16,emp_0005
+emp_0315,Riley Scott,support,Senior Associate,bangalore,2022-11-11,emp_0010
+emp_0316,Finley Patel,finance,Senior Associate,london,2019-09-30,emp_0003
+emp_0317,Casey Hill,people_ops,Principal,sf,2019-12-09,emp_0001
+emp_0318,Alex Patel,engineering,Principal,sf,2023-11-23,emp_0013
+emp_0319,Blake Walker,finance,Associate,austin,2020-02-21,emp_0005
+emp_0320,Avery King,sales,Manager,sf,2021-03-04,emp_0002
+emp_0321,Jordan Johnson,marketing,Manager,austin,2021-01-18,emp_0004
+emp_0322,Cameron Hill,sales,Lead,bangalore,2022-09-05,emp_0012
+emp_0323,Reese Lewis,sales,Lead,london,2019-12-17,emp_0002
+emp_0324,Cameron Brown,marketing,Associate,sf,2021-03-20,emp_0004
+emp_0325,Morgan Garcia,engineering,Lead,austin,2021-07-27,emp_0004
+emp_0326,Casey Martin,finance,Lead,nyc,2024-06-21,emp_0008
+emp_0327,Harper Young,marketing,Lead,austin,2025-12-31,emp_0002
+emp_0328,Skyler Wright,marketing,Senior Associate,nyc,2019-09-19,emp_0006
+emp_0329,Jordan Smith,support,Manager,london,2020-12-24,emp_0005
+emp_0330,Finley Nguyen,engineering,Manager,nyc,2023-04-17,emp_0012
+emp_0331,Reese Lewis,support,Associate,austin,2025-09-07,emp_0010
+emp_0332,Finley Chen,support,Principal,sf,2025-06-07,emp_0007
+emp_0333,Harper Young,finance,Lead,london,2019-05-29,emp_0002
+emp_0334,Morgan Garcia,marketing,Lead,sf,2020-01-02,emp_0006
+emp_0335,Morgan Chen,finance,Principal,austin,2020-08-25,emp_0001
+emp_0336,Jordan Smith,sales,Lead,austin,2020-06-07,emp_0008
+emp_0337,Morgan Hill,finance,Senior Associate,sf,2022-09-08,emp_0003
+emp_0338,Skyler Hill,people_ops,Lead,london,2022-06-27,emp_0009
+emp_0339,Harper Scott,marketing,Principal,sf,2020-12-06,emp_0014
+emp_0340,Alex Clark,support,Associate,austin,2019-09-18,emp_0005
+emp_0341,Alex Hill,marketing,Lead,bangalore,2019-10-09,emp_0010
+emp_0342,Jamie Smith,finance,Manager,nyc,2020-05-18,emp_0011
+emp_0343,Sage Lewis,sales,Senior Associate,remote,2019-11-02,emp_0012
+emp_0344,Taylor Chen,engineering,Manager,sf,2021-07-24,emp_0003
+emp_0345,Rowan Chen,marketing,Principal,london,2020-12-20,emp_0014
+emp_0346,Jordan Kim,finance,Senior Associate,london,2022-08-12,emp_0011
+emp_0347,Elliot Wright,marketing,Lead,nyc,2021-02-07,emp_0015
+emp_0348,Finley Martin,finance,Lead,bangalore,2023-04-18,emp_0010
+emp_0349,Elliot Chen,sales,Lead,london,2022-11-29,emp_0004
+emp_0350,Avery Lopez,people_ops,Senior Associate,bangalore,2020-10-10,emp_0006

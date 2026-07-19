@@ -281,3 +281,102 @@ def get(key: str | None) -> Scenario:
     if resolved not in SCENARIOS:
         raise KeyError(f"unknown scenario {resolved!r}; known: {sorted(SCENARIOS)}")
     return SCENARIOS[resolved]
+
+
+# --------------------------------------------------------------------------
+# hr_attrition — live-upload demo pack. Deliberately NOT added to SCENARIOS
+# below: this domain must stay unseen by the agent until it is dragged in on
+# stage as CSVs (backend/data/upload_demo/, written by generate.py there).
+# Regretted attrition (a voluntary exit of someone the company wanted to
+# keep) in engineering spikes over the trailing 14 days, hidden the same way
+# supply/fintech hide theirs: flat in aggregate, elevated in one segment.
+# --------------------------------------------------------------------------
+
+DEPARTMENTS = ["engineering", "sales", "support", "marketing", "finance", "people_ops"]
+TITLES = ["Associate", "Senior Associate", "Lead", "Manager", "Principal"]
+LOCATIONS = ["remote", "nyc", "sf", "austin", "london", "bangalore"]
+EXIT_REASONS = ["better_offer", "relocation", "career_change", "performance", "retirement", "return_to_school"]
+
+N_EMPLOYEES = 350
+
+
+def gen_employees(rng: random.Random, today: date) -> list[dict]:
+    ids = [f"emp_{i:04d}" for i in range(1, N_EMPLOYEES + 1)]
+    rows = []
+    for i, eid in enumerate(ids, start=1):
+        first, last = rng.choice(FIRST_NAMES), rng.choice(LAST_NAMES)
+        is_lead = i <= 15  # first 15 are the managers everyone else reports to
+        rows.append({
+            "id": eid,
+            "name": f"{first} {last}",
+            "department": rng.choice(DEPARTMENTS),
+            "title": "Manager" if is_lead else rng.choice(TITLES),
+            "location": rng.choice(LOCATIONS),
+            "hire_date": (today - timedelta(days=rng.randint(90, 2600))).isoformat(),
+            "manager_id": None if is_lead else rng.choice(ids[:15]),
+        })
+    return rows
+
+
+def gen_reviews(rng: random.Random, today: date, employee_ids: list[str]) -> list[dict]:
+    rows = []
+    n = 0
+    for eid in employee_ids:
+        for _ in range(rng.randint(1, 3)):
+            n += 1
+            rows.append({
+                "id": f"rev_{n:05d}",
+                "employee_id": eid,
+                "review_date": (today - timedelta(days=rng.randint(0, TOTAL_DAYS - 1))).isoformat(),
+                "rating": rng.choice([1, 2, 3, 3, 4, 4, 4, 5]),
+                "promotion_ready": rng.random() < 0.15,
+            })
+    return rows
+
+
+def gen_exits(rng: random.Random, today: date, employees: list[dict]) -> list[dict]:
+    culprit = "engineering"  # planted: this department's regretted-exit rate spikes in-window
+    rows = []
+    n = 0
+    for day_offset in range(TOTAL_DAYS - 1, -1, -1):  # oldest -> newest
+        the_day = today - timedelta(days=day_offset)
+        in_anomaly = day_offset < ANOMALY_DAYS
+        # ponytail: an employee can exit more than once in a year of synthetic
+        # data (no dedupe against a prior exit row) — fine for a demo table,
+        # would need a "departed" set if this ever fed something that cared.
+        for _ in range(rng.randint(4, 7)):
+            n += 1
+            emp = rng.choice(employees)
+            dept = emp["department"]
+            # Baseline regretted-exit rate ~8%; engineering jumps to ~55% in-window.
+            regretted = rng.random() < (0.55 if (in_anomaly and dept == culprit) else 0.08)
+            rows.append({
+                "id": f"ext_{n:04d}",
+                "employee_id": emp["id"],
+                "exit_date": the_day.isoformat(),
+                "department": dept,
+                "reason": rng.choice(EXIT_REASONS),
+                "regretted": regretted,
+            })
+    return rows
+
+
+def _build_hr_attrition(rng: random.Random, today: date) -> dict[str, list[dict]]:
+    employees = gen_employees(rng, today)
+    employee_ids = [e["id"] for e in employees]
+    return {
+        "employees": employees,
+        "reviews": gen_reviews(rng, today, employee_ids),
+        "exits": gen_exits(rng, today, employees),
+    }
+
+
+HR_ATTRITION = Scenario(
+    key="hr_attrition",
+    label="HR attrition and performance (live-upload demo)",
+    build=_build_hr_attrition,
+    tables=("employees", "reviews", "exits"),
+    anomaly="regretted attrition in engineering 8% -> 55% over the trailing 14 days",
+    question="Which department is driving regretted attrition?",
+    focus=("exits", "department", "engineering"),
+)
