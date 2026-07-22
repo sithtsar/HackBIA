@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
+import { deleteGraphNode, getNodeSample } from "../api";
 import { useStore } from "../store";
-import type { ActionProposal, GraphNode, OntologyTerm } from "../types";
+import type { ActionProposal, GraphNode, NodeSample, OntologyTerm } from "../types";
 
 function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
@@ -7,6 +9,108 @@ function Field({ label, value, mono }: { label: string; value: string; mono?: bo
       <div className="text-[10px] uppercase tracking-wider text-text-secondary">{label}</div>
       <div className={`mt-0.5 text-[12px] text-text-primary ${mono ? "font-mono" : ""}`}>{value}</div>
     </div>
+  );
+}
+
+function cell(v: string | number | null): string {
+  return v === null ? "null" : String(v);
+}
+
+function SampleTable({ columns, rows }: { columns: string[]; rows: (string | number | null)[][] }) {
+  return (
+    <div className="mt-1 overflow-x-auto rounded border border-hairline">
+      <table className="w-full border-collapse font-mono text-[10px]">
+        <thead>
+          <tr>
+            {columns.map((c) => (
+              <th key={c} className="whitespace-nowrap border-b border-hairline px-1.5 py-1 text-left text-text-secondary">
+                {c}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            // eslint-disable-next-line react/no-array-index-key -- rows have no stable id
+            <tr key={i}>
+              {row.map((v, j) => (
+                <td key={j} className="whitespace-nowrap px-1.5 py-1 text-text-primary">
+                  {cell(v)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function SampleSection({ nodeId }: { nodeId: string }) {
+  const [sample, setSample] = useState<NodeSample | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSample(null);
+    setError(null);
+    getNodeSample(nodeId)
+      .then(setSample)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+  }, [nodeId]);
+
+  if (error) return null; // e.g. a stale/malformed stored SQL — not worth surfacing here
+  if (!sample) {
+    return <p className="mt-2 text-[11px] text-text-secondary">Loading sample…</p>;
+  }
+  if (sample.row_count === 0) return null; // e.g. an action node has no underlying query
+
+  const hasMore = sample.row_count > sample.head.length;
+  return (
+    <div className="mt-3">
+      <div className="text-[10px] uppercase tracking-wider text-text-secondary">
+        Sample data ({sample.row_count} rows)
+      </div>
+      <SampleTable columns={sample.columns} rows={sample.head} />
+      {hasMore ? (
+        <>
+          <div className="mt-1 text-center text-[10px] text-text-secondary">⋮</div>
+          <SampleTable columns={sample.columns} rows={sample.tail} />
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function DeleteNodeButton({ node }: { node: GraphNode }) {
+  const { pushToast, setSelectedId } = useStore();
+  const [deleting, setDeleting] = useState(false);
+
+  const onDelete = async (): Promise<void> => {
+    const ok = window.confirm(
+      `Delete "${node.label}" and everything built downstream from it (derived metrics, insights, actions)? This can't be undone.`,
+    );
+    if (!ok || deleting) return;
+    setDeleting(true);
+    try {
+      const { node_ids } = await deleteGraphNode(node.id);
+      setSelectedId(null);
+      pushToast(`Deleted ${node_ids.length} node${node_ids.length === 1 ? "" : "s"}`, "success");
+    } catch (err) {
+      pushToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={() => void onDelete()}
+      disabled={deleting}
+      className="mt-3 w-full rounded border border-[#E5484D] px-2 py-1 text-[11px] uppercase tracking-wider text-[#E5484D] hover:bg-[#E5484D] hover:text-panel disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {deleting ? "Deleting…" : "Delete node"}
+    </button>
   );
 }
 
@@ -19,6 +123,8 @@ function NodeSection({ node }: { node: GraphNode }) {
       {metaEntries.map(([key, value]) => (
         <Field key={key} label={key} value={value} mono />
       ))}
+      <SampleSection nodeId={node.id} />
+      <DeleteNodeButton node={node} />
     </div>
   );
 }

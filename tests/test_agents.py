@@ -127,7 +127,7 @@ def test_run_ask_event_sequence_mocked_llm(monkeypatch):
         {"id": "obj_customer", "name": "Customer", "table": "customers"},
     ])
     # Canned planner output: a valid, guard-passing, EXPLAIN-able query against
-    # an approved object term. Customers question -> no ticket insight.
+    # an approved object term. Customers question -> routine (non-anomalous) answer.
     def fake_llm_ask(question, approved_terms_json, schema_and_samples, retry_note):
         return AskResponse(
             sql="SELECT count(*) AS n FROM customers",
@@ -137,7 +137,7 @@ def test_run_ask_event_sequence_mocked_llm(monkeypatch):
 
     def fake_llm_interpret(question, sql, result_json, terms_used_json):
         return InsightInterpretation(
-            has_insight=False, text="", severity="info",
+            has_insight=False, text="There are 3 customers.", severity="info",
             warrants_action=False, reasoning_one_line="routine count",
         )
 
@@ -152,8 +152,8 @@ def test_run_ask_event_sequence_mocked_llm(monkeypatch):
     assert "node_touched" in types
     assert types.index("sql_generated") < types.index("sql_result")
     assert types.index("sql_result") < types.index("run_completed")
-    # routine query -> no insight fired
-    assert "insight" not in types
+    # every ask gets a direct answer, even a routine (non-anomalous) one
+    assert "insight" in types
     assert "action_proposed" not in types
 
 

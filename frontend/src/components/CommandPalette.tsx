@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { postOntologyMetric } from "../api";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { getAskSuggestions, postOntologyMetric } from "../api";
 import { useStore } from "../store";
 
-const CANNED_QUESTIONS = [
+// Shown until the data-driven suggestions load (or if that call 502s — see api.ts).
+const FALLBACK_QUESTIONS = [
   "How many active customers do we have?",
   "What's happening with support tickets in the last two weeks?",
   "Which customers have the most open tickets?",
@@ -45,6 +46,9 @@ export function CommandPalette({ actions }: { actions: PaletteActions }) {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const [suggestions, setSuggestions] = useState<readonly string[]>(FALLBACK_QUESTIONS);
+  const suggestionsLoaded = useRef(false);
+
   const openPalette = (): void => {
     setMode("list");
     setQuery("");
@@ -55,6 +59,16 @@ export function CommandPalette({ actions }: { actions: PaletteActions }) {
     setTablesChecked(new Set());
     setFormError(null);
     setOpen(true);
+    if (!suggestionsLoaded.current) {
+      suggestionsLoaded.current = true;
+      getAskSuggestions()
+        .then((qs) => {
+          if (qs.length > 0) setSuggestions(qs);
+        })
+        .catch(() => {
+          // 502 (LLM/parse failure) or offline — keep the static fallback list.
+        });
+    }
   };
 
   useEffect(() => {
@@ -78,7 +92,7 @@ export function CommandPalette({ actions }: { actions: PaletteActions }) {
   const commands = useMemo<Command[]>(() => {
     const close = (): void => setOpen(false);
     return [
-      ...CANNED_QUESTIONS.map((q) => ({
+      ...suggestions.map((q) => ({
         id: q,
         label: q,
         hint: "ask",
@@ -103,7 +117,7 @@ export function CommandPalette({ actions }: { actions: PaletteActions }) {
       { id: "export", label: "Export ontology.yaml", hint: "file", run: () => { void actions.exportYaml(); close(); } },
       { id: "fit", label: "Fit view", hint: "canvas", run: () => { window.dispatchEvent(new Event("foundry:fit")); close(); } },
     ];
-  }, [actions, approveAll, pendingCount]);
+  }, [actions, approveAll, pendingCount, suggestions]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

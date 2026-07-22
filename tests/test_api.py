@@ -3,8 +3,15 @@ import asyncio
 import httpx
 import pytest
 
-from backend.app import main
+from backend.app import agents, main, seed
 from backend.app.ontology import ONTOLOGY_PATH, load_ontology, save_ontology
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _ensure_db():
+    if not agents.DB_PATH.exists():
+        seed.main()
+    yield
 
 
 @pytest.fixture(autouse=True)
@@ -589,3 +596,79 @@ def test_build_graph_metric_meta_includes_sql_and_definition():
     body = r.json()
     metric_nodes = [n for n in body["graph"]["nodes"] if n["kind"] == "metric"]
     assert len(metric_nodes) == 0
+
+
+def test_delete_graph_node_cascades_to_derived_metric_and_updates_yaml():
+    original = ONTOLOGY_PATH.read_text()
+    try:
+        onto = load_ontology()
+        onto["objects"] = [{"id": "obj_customer", "name": "Customer", "table": "customers"}]
+        onto["metrics"] = [{
+            "id": "m_x", "name": "X", "definition": "d", "sql": "SELECT 1",
+            "source_tables": ["customers"], "confidence": 0.8, "status": "approved",
+        }]
+        save_ontology(onto)
+
+        async def run():
+            async with _client() as c:
+                q = main.bus.subscribe()
+                r = await c.delete("/api/graph/obj_customer")
+                env = await asyncio.wait_for(q.get(), timeout=1)
+                main.bus.unsubscribe(q)
+                state = await c.get("/api/state")
+                return r, env, state
+
+        r, env, state = asyncio.run(run())
+        assert r.status_code == 200
+        assert set(r.json()["node_ids"]) == {"obj_customer", "m_x"}
+        assert env.type == "node_deleted"
+        assert set(env.payload["node_ids"]) == {"obj_customer", "m_x"}
+
+        onto = load_ontology()
+        assert onto["objects"] == []
+        assert onto["metrics"] == []
+        # source table itself is untouched — only the object mapping onto it is gone
+        assert any(s["table"] == "customers" for s in onto["sources"])
+
+        node_ids = {n["id"] for n in state.json()["graph"]["nodes"]}
+        assert "obj_customer" not in node_ids
+        assert "m_x" not in node_ids
+        edge_endpoints = {e["source"] for e in state.json()["graph"]["edges"]} | {
+            e["target"] for e in state.json()["graph"]["edges"]
+        }
+        assert "obj_customer" not in edge_endpoints
+        assert "m_x" not in edge_endpoints
+    finally:
+        ONTOLOGY_PATH.write_text(original)
+
+
+def test_delete_graph_node_unknown_404():
+    async def run():
+        async with _client() as c:
+            return await c.delete("/api/graph/does_not_exist")
+
+    r = asyncio.run(run())
+    assert r.status_code == 404
+
+
+def test_node_sample_returns_head_and_tail_for_a_source_table():
+    async def run():
+        async with _client() as c:
+            return await c.get("/api/nodes/src_customers/sample")
+
+    r = asyncio.run(run())
+    assert r.status_code == 200
+    body = r.json()
+    assert body["row_count"] > 0
+    assert len(body["head"]) == min(5, body["row_count"])
+    assert len(body["tail"]) == min(5, body["row_count"])
+    assert len(body["columns"]) > 0
+
+
+def test_node_sample_unknown_404():
+    async def run():
+        async with _client() as c:
+            return await c.get("/api/nodes/does_not_exist/sample")
+
+    r = asyncio.run(run())
+    assert r.status_code == 404

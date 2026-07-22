@@ -45,6 +45,33 @@ function DraftOntologyMetrics(schema_and_samples: string, inferred_joins_json: s
   "#
 }
 
+// --- Flow 1b: ask suggestions (data-driven prompt chips) ----------------
+
+class SuggestQuestionsResponse {
+  questions string[] @description("3-5 short, concrete questions a business user could ask about THIS data — reference real object/metric names, not generic BI cliches")
+}
+
+function SuggestAskQuestions(approved_terms_json: string, schema_and_samples: string) -> SuggestQuestionsResponse {
+  client Cerebras
+  prompt #"
+    {{ _.role("system") }}
+    You are a BI copilot suggesting what a user could ask next. Given the
+    APPROVED ontology terms (objects/joins/metrics) and the DuckDB schema
+    with sample rows, propose 3-5 short natural-language questions this data
+    can actually answer. Ground them in the real table/column names and
+    values you see — no generic placeholders.
+
+    {{ _.role("user") }}
+    Approved ontology terms:
+    {{ approved_terms_json }}
+
+    Schema and sample rows:
+    {{ schema_and_samples }}
+
+    {{ ctx.output_format }}
+  "#
+}
+
 // --- Flow 2: ask (NL question -> grounded SQL) -------------------------
 
 class AskResponse {
@@ -114,8 +141,8 @@ function DraftActionTicket(insight_text: string) -> ActionDraftResponse {
 
 class InsightInterpretation {
   has_insight bool
-  text string @description("one-sentence insight description; empty if has_insight is false")
-  severity string @description("'info', 'warning', or 'critical'; empty if has_insight is false")
+  text string @description("direct one-to-two sentence answer to the user's question, grounded in the query result — always filled in, regardless of has_insight")
+  severity string @description("'info' for a routine answer; 'warning' or 'critical' only when has_insight is true and the pattern is concerning")
   warrants_action bool
   reasoning_one_line string
 }
@@ -124,11 +151,15 @@ function InterpretQueryResult(question: string, sql: string, result_json: string
   client Cerebras
   prompt #"
     {{ _.role("system") }}
-    You are a BI insight interpreter. Given a user question, the SQL used to
-    answer it, and the query result, determine if there is an actionable
-    insight. Return has_insight=true only when the data reveals a significant
-    pattern, anomaly, or opportunity — not for routine queries. When you find
-    an insight, set the severity and warrants_action accordingly.
+    You are a BI analyst. Given a user question, the SQL used to answer it,
+    and the query result, ALWAYS write a direct one-to-two sentence answer to
+    the question in `text`, citing the actual numbers from the result — this
+    is what the user sees as the answer to what they asked, so never leave it
+    empty. Separately, set has_insight=true only when the data ALSO reveals a
+    significant pattern, anomaly, or opportunity beyond just answering the
+    question — not for routine queries. When has_insight is true, set
+    severity to 'warning' or 'critical' and warrants_action accordingly;
+    otherwise severity is 'info' and warrants_action is false.
 
     {{ _.role("user") }}
     Question: {{ question }}

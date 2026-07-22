@@ -51,6 +51,7 @@ Frontend: bun, dev server on 5173, proxy `/api` → `http://localhost:8400`.
 | `workflow_created` | `{ "workflow_id": string, "title": string }` |
 | `workflow_renamed` | `{ "workflow_id": string, "title": string }` |
 | `workflow_completed` | `{ "workflow_id": string }` |
+| `node_deleted` | `{ "node_ids": string[] }` (the deleted node plus every downstream dependent cascaded with it — see `DELETE /api/graph/{id}`) |
 
 ## Core objects
 
@@ -132,6 +133,7 @@ LLM output contract (backend): every LLM call goes through **BAML** (`baml-py`) 
 | `GET /api/state` | — | `{ graph: {nodes, edges}, terms: OntologyTerm[], actions: ActionProposal[], pending: {subject_kind, subject_id}[], workflows: Workflow[], active_workflow_id: string\|null }` |
 | `GET /api/events` | — | SSE stream of envelopes (live only, no history) |
 | `POST /api/ontology/draft` | `{}` | `{ run_id }` (agent runs async, events stream) |
+| `GET /api/ask/suggestions` | — | `{ questions: string[] }` (LLM-generated, grounded in current approved ontology + schema; 502 on LLM/parse failure — client falls back to a static list) |
 | `POST /api/ask` | `{ question: string }` | `{ run_id }` (creates workflow if none active, scopes ask to active workflow) |
 | `POST /api/workflows` | `{ title: string }` | `{ workflow_id: string }` |
 | `GET /api/workflows` | — | `{ workflows: Workflow[] }` |
@@ -146,6 +148,8 @@ LLM output contract (backend): every LLM call goes through **BAML** (`baml-py`) 
 | `POST /api/data/upload` | multipart: `file` (CSV, required), `table` (optional name; default = sanitized filename stem) | `{ table: string, rows: number, columns: {name: string, type: string}[] }` (loads into `foundry.duckdb`, appends `{table}` to ontology.yaml `sources:` if absent, emits a `status` event; 400 bad name/CSV, 413 over 20MB) |
 | `POST /api/demo/reset` | — | `{ ok: true }` (reseeds `foundry.duckdb`+CSVs, restores `ontology.yaml` from the committed baseline, clears in-memory actions/pending/insight/workflow state, truncates `events.jsonl`, emits one `status` event) |
 | `GET /api/ontology/export` | — | `ontology.yaml` file download, `Content-Type: application/x-yaml`, filename `ontology.yaml` |
+| `GET /api/nodes/{node_id}/sample` | — | `{ columns: string[], head: (string\|number\|null)[][], tail: (string\|number\|null)[][], row_count: number }` (head/tail 5 rows each; source/object samples the table, metric samples its own SQL, insight samples the SQL that produced it; empty result for a kind with no underlying query e.g. action; 404 unknown node id, 502 on a malformed stored SQL) |
+| `DELETE /api/graph/{node_id}` | — | `{ node_ids: string[] }` (deletes the node and every downstream dependent reached via `feeds`/`derives`/`produces` edges — e.g. deleting an object also removes metrics derived from it and any insights/actions built from those; any edge touching a deleted node, including `join`, is dropped too, so the graph never has an edge pointing at a node that no longer exists; removes from `ontology.yaml` and/or in-memory event-sourced state as appropriate; emits `node_deleted`; 404 unknown node id) |
 
 Every event emitted on the bus is also appended to `backend/data/events.jsonl` (one JSON per line). Replay reads a jsonl and re-emits. That file doubles as demo insurance.
 

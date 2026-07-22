@@ -388,4 +388,43 @@ describe("reduceBoard", () => {
 
     expect(reduceBoard(board, e)).toBe(board);
   });
+
+  test("node_deleted removes the node, its dangling edges, and its term/action/pending entries", () => {
+    const board = boardWith({
+      graph: {
+        nodes: [
+          { id: "obj_customer", kind: "object", label: "Customer", status: "approved", meta: { table: "customers" } },
+          { id: "m_x", kind: "metric", label: "X", status: "approved", meta: {} },
+          { id: "obj_order", kind: "object", label: "Order", status: "approved", meta: { table: "orders" } },
+        ],
+        edges: [
+          { id: "e1", source: "obj_customer", target: "m_x", kind: "derives" },
+          { id: "e2", source: "obj_customer", target: "obj_order", kind: "join" },
+        ],
+      },
+      terms: [
+        {
+          id: "m_x", kind: "metric", name: "X", definition: "d", sql: "",
+          source_tables: [], confidence: 0.5, status: "approved",
+        },
+      ],
+      actions: [],
+      pending: [{ subject_kind: "ontology_term", subject_id: "m_x" }],
+    });
+    const e = envelope<EventEnvelope>({
+      id: "evt_7",
+      ts: "2026-07-03T10:00:06Z",
+      run_id: "",
+      type: "node_deleted",
+      payload: { node_ids: ["obj_customer", "m_x"] },
+    });
+
+    const next = reduceBoard(board, e);
+
+    expect(next.graph.nodes.map((n) => n.id)).toEqual(["obj_order"]);
+    // both edges touched a deleted node (one directly, the join via its other endpoint's partner)
+    expect(next.graph.edges).toHaveLength(0);
+    expect(next.terms).toHaveLength(0);
+    expect(next.pending).toHaveLength(0);
+  });
 });

@@ -208,8 +208,10 @@ class ReplayBody(BaseModel):
     reset: bool = True
 
 
-@app.get("/api/state")
-async def get_state() -> dict[str, Any]:
+def _snapshot() -> tuple[dict[str, Any], dict[str, list[dict[str, Any]]]]:
+    """Merged (ontology.yaml + event-sourced proposals) view used by every
+    read of the board: GET /api/state, node sampling, and delete cascade all
+    need the same onto-with-event-sourced-objects + graph."""
     onto = onto_mod.load_ontology()
     existing_object_ids = {o["id"] for o in onto.get("objects", [])}
     existing_metric_ids = {m["id"] for m in onto.get("metrics", [])}
@@ -236,6 +238,12 @@ async def get_state() -> dict[str, Any]:
     extra_nodes = term_nodes + list(_insight_nodes.values()) + list(_action_nodes.values())
     extra_edges = term_edges + list(_produces_edges.values())
     graph = onto_mod.build_graph(onto, extra_nodes=extra_nodes, extra_edges=extra_edges)
+    return onto, graph
+
+
+@app.get("/api/state")
+async def get_state() -> dict[str, Any]:
+    onto, graph = _snapshot()
     base_terms = onto_mod.terms_from_ontology(onto)
     # Append event-sourced terms not yet in ontology.yaml (proposed objects, joins, metrics)
     term_ids = {t.id for t in base_terms}
@@ -260,6 +268,88 @@ async def get_state() -> dict[str, Any]:
         "workflows": list(_workflows.values()),
         "active_workflow_id": _active_workflow_id,
     }
+
+
+@app.get("/api/nodes/{node_id}/sample")
+async def node_sample(node_id: str) -> dict[str, Any]:
+    """Head/tail rows behind a graph node — the source/object's table, a
+    metric's own SQL, or the SQL that produced an insight. 404 for an unknown
+    node id, 204-shaped empty result (row_count 0, no columns) for a node
+    kind with no underlying query (e.g. an action)."""
+    _, graph = _snapshot()
+    node = next((n for n in graph["nodes"] if n["id"] == node_id), None)
+    if node is None:
+        raise HTTPException(404, f"unknown node id: {node_id}")
+    try:
+        sample = await asyncio.to_thread(agents.sample_node_data, node["kind"], node["meta"])
+    except Exception as e:  # noqa: BLE001 — malformed stored SQL surfaces as a client-visible error, not a crash
+        raise HTTPException(status_code=502, detail=f"{type(e).__name__}: {e}") from e
+    if sample is None:
+        return {"columns": [], "head": [], "tail": [], "row_count": 0}
+    return sample
+
+
+@app.delete("/api/graph/{node_id}")
+async def delete_graph_node(node_id: str) -> dict[str, list[str]]:
+    """Delete a node and its downstream dependents (cascading along
+    feeds/derives/produces edges — a metric derived from a deleted object has
+    no meaning without it, same for insights/actions built from either) so no
+    edge is ever left pointing at a node that no longer exists."""
+    onto, graph = _snapshot()
+    nodes_by_id = {n["id"]: n for n in graph["nodes"]}
+    if node_id not in nodes_by_id:
+        raise HTTPException(404, f"unknown node id: {node_id}")
+
+    cascade_kinds = {"feeds", "derives", "produces"}
+    adjacency: dict[str, list[str]] = {}
+    for e in graph["edges"]:
+        if e["kind"] in cascade_kinds:
+            adjacency.setdefault(e["source"], []).append(e["target"])
+
+    to_delete: set[str] = set()
+    stack = [node_id]
+    while stack:
+        nid = stack.pop()
+        if nid in to_delete:
+            continue
+        to_delete.add(nid)
+        stack.extend(adjacency.get(nid, []))
+
+    removed_tables = {
+        nodes_by_id[nid]["meta"].get("table", "")
+        for nid in to_delete
+        if nodes_by_id[nid]["kind"] in ("source", "object")
+    }
+    removed_tables.discard("")
+
+    onto["sources"] = [s for s in onto.get("sources", []) if f"src_{s['table']}" not in to_delete]
+    onto["objects"] = [o for o in onto.get("objects", []) if o["id"] not in to_delete]
+    onto["metrics"] = [m for m in onto.get("metrics", []) if m["id"] not in to_delete]
+    onto["joins"] = [
+        j for j in onto.get("joins", [])
+        if j["id"] not in to_delete
+        and j["from"].split(".")[0] not in removed_tables
+        and j["to"].split(".")[0] not in removed_tables
+    ]
+    onto_mod.save_ontology(onto)
+
+    for nid in to_delete:
+        _term_nodes.pop(nid, None)
+        _insight_nodes.pop(nid, None)
+        _insight_sql_used.pop(nid, None)
+        _action_nodes.pop(nid, None)
+        _actions.pop(nid, None)
+        _pending.pop(nid, None)
+    for e in list(_term_edges.values()):
+        if e["source"] in to_delete or e["target"] in to_delete:
+            _term_edges.pop(e["id"], None)
+    for e in list(_produces_edges.values()):
+        if e["source"] in to_delete or e["target"] in to_delete:
+            _produces_edges.pop(e["id"], None)
+
+    node_ids = sorted(to_delete)
+    bus.publish("node_deleted", {"node_ids": node_ids})
+    return {"node_ids": node_ids}
 
 
 @app.get("/api/events")
@@ -292,6 +382,17 @@ async def ontology_draft() -> dict[str, str]:
     run_id = _new_run_id()
     asyncio.create_task(agents.run_ontology_draft(bus, run_id))
     return {"run_id": run_id}
+
+
+@app.get("/api/ask/suggestions")
+async def ask_suggestions() -> dict[str, list[str]]:
+    """LLM-generated prompt chips grounded in the current approved ontology
+    + schema. 502 on LLM/parse failure — the client falls back to a static
+    list rather than have the server fabricate one."""
+    try:
+        return {"questions": await agents.get_ask_suggestions()}
+    except Exception as e:  # noqa: BLE001 — surfaced as a client-visible fallback trigger, not a crash
+        raise HTTPException(status_code=502, detail=f"{type(e).__name__}: {e}") from e
 
 
 @app.post("/api/ask")

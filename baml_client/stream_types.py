@@ -23,7 +23,7 @@ class StreamState(BaseModel, typing.Generic[StreamStateValueT]):
     value: StreamStateValueT
     state: typing_extensions.Literal["Pending", "Incomplete", "Complete"]
 # #########################################################################
-# Generated classes (5)
+# Generated classes (6)
 # #########################################################################
 
 class ActionDraftResponse(BaseModel):
@@ -48,10 +48,13 @@ class DraftMetricsResponse(BaseModel):
 
 class InsightInterpretation(BaseModel):
     has_insight: typing.Optional[bool] = None
-    text: typing.Optional[str] = Field(default=None, description='one-sentence insight description; empty if has_insight is false')
-    severity: typing.Optional[str] = Field(default=None, description='\'info\', \'warning\', or \'critical\'; empty if has_insight is false')
+    text: typing.Optional[str] = Field(default=None, description='direct one-to-two sentence answer to the user\'s question, grounded in the query result — always filled in, regardless of has_insight')
+    severity: typing.Optional[str] = Field(default=None, description='\'info\' for a routine answer; \'warning\' or \'critical\' only when has_insight is true and the pattern is concerning')
     warrants_action: typing.Optional[bool] = None
     reasoning_one_line: typing.Optional[str] = None
+
+class SuggestQuestionsResponse(BaseModel):
+    questions: typing.List[str] = Field(description='3-5 short, concrete questions a business user could ask about THIS data — reference real object/metric names, not generic BI cliches')
 
 # #########################################################################
 # Generated type aliases (0)

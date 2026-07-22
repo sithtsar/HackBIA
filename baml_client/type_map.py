@@ -31,5 +31,8 @@ type_map = {
     "types.InsightInterpretation": types.InsightInterpretation,
     "stream_types.InsightInterpretation": stream_types.InsightInterpretation,
 
+    "types.SuggestQuestionsResponse": types.SuggestQuestionsResponse,
+    "stream_types.SuggestQuestionsResponse": stream_types.SuggestQuestionsResponse,
+
 
 }

@@ -38,6 +38,7 @@ EventType = Literal[
     "workflow_created",
     "workflow_renamed",
     "workflow_completed",
+    "node_deleted",
 ]
 
 

@@ -142,6 +142,21 @@ class BamlAsyncClient:
                 "question": question,"sql": sql,"result_json": result_json,"terms_used_json": terms_used_json,
             })
             return typing.cast(types.InsightInterpretation, __result__.cast_to(types, types, stream_types, False, __runtime__))
+    async def SuggestAskQuestions(self, approved_terms_json: str,schema_and_samples: str,
+        baml_options: BamlCallOptions = {},
+    ) -> types.SuggestQuestionsResponse:
+        # Check if on_tick is provided
+        if 'on_tick' in baml_options:
+            # Use streaming internally when on_tick is provided
+            __stream__ = self.stream.SuggestAskQuestions(approved_terms_json=approved_terms_json,schema_and_samples=schema_and_samples,
+                baml_options=baml_options)
+            return await __stream__.get_final_response()
+        else:
+            # Original non-streaming code
+            __result__ = await self.__options.merge_options(baml_options).call_function_async(function_name="SuggestAskQuestions", args={
+                "approved_terms_json": approved_terms_json,"schema_and_samples": schema_and_samples,
+            })
+            return typing.cast(types.SuggestQuestionsResponse, __result__.cast_to(types, types, stream_types, False, __runtime__))
     
 
 
@@ -199,6 +214,18 @@ class BamlStreamClient:
           lambda x: typing.cast(types.InsightInterpretation, x.cast_to(types, types, stream_types, False, __runtime__)),
           __ctx__,
         )
+    def SuggestAskQuestions(self, approved_terms_json: str,schema_and_samples: str,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.BamlStream[stream_types.SuggestQuestionsResponse, types.SuggestQuestionsResponse]:
+        __ctx__, __result__ = self.__options.merge_options(baml_options).create_async_stream(function_name="SuggestAskQuestions", args={
+            "approved_terms_json": approved_terms_json,"schema_and_samples": schema_and_samples,
+        })
+        return baml_py.BamlStream[stream_types.SuggestQuestionsResponse, types.SuggestQuestionsResponse](
+          __result__,
+          lambda x: typing.cast(stream_types.SuggestQuestionsResponse, x.cast_to(types, types, stream_types, True, __runtime__)),
+          lambda x: typing.cast(types.SuggestQuestionsResponse, x.cast_to(types, types, stream_types, False, __runtime__)),
+          __ctx__,
+        )
     
 
 class BamlHttpRequestClient:
@@ -235,6 +262,13 @@ class BamlHttpRequestClient:
             "question": question,"sql": sql,"result_json": result_json,"terms_used_json": terms_used_json,
         }, mode="request")
         return __result__
+    async def SuggestAskQuestions(self, approved_terms_json: str,schema_and_samples: str,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.baml_py.HTTPRequest:
+        __result__ = await self.__options.merge_options(baml_options).create_http_request_async(function_name="SuggestAskQuestions", args={
+            "approved_terms_json": approved_terms_json,"schema_and_samples": schema_and_samples,
+        }, mode="request")
+        return __result__
     
 
 class BamlHttpStreamRequestClient:
@@ -269,6 +303,13 @@ class BamlHttpStreamRequestClient:
     ) -> baml_py.baml_py.HTTPRequest:
         __result__ = await self.__options.merge_options(baml_options).create_http_request_async(function_name="InterpretQueryResult", args={
             "question": question,"sql": sql,"result_json": result_json,"terms_used_json": terms_used_json,
+        }, mode="stream")
+        return __result__
+    async def SuggestAskQuestions(self, approved_terms_json: str,schema_and_samples: str,
+        baml_options: BamlCallOptions = {},
+    ) -> baml_py.baml_py.HTTPRequest:
+        __result__ = await self.__options.merge_options(baml_options).create_http_request_async(function_name="SuggestAskQuestions", args={
+            "approved_terms_json": approved_terms_json,"schema_and_samples": schema_and_samples,
         }, mode="stream")
         return __result__
     
