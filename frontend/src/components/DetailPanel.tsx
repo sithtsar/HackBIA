@@ -1,7 +1,16 @@
 import { useEffect, useState } from "react";
 import { deleteGraphNode, getNodeSample } from "../api";
 import { useStore } from "../store";
-import type { ActionProposal, GraphNode, NodeSample, OntologyTerm } from "../types";
+import type { ActionProposal, GraphEdge, GraphNode, NodeSample, OntologyTerm } from "../types";
+
+const ERROR_RED = "#E5484D";
+
+// Mirrors AgentFeedPanel's colorFor/FoundryNode's statusColor for insight severity.
+const SEVERITY_COLOR: Record<string, string> = {
+  critical: ERROR_RED,
+  warning: "var(--color-pending-amber)",
+  info: "var(--color-agent-blue)",
+};
 
 function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
@@ -81,6 +90,53 @@ function SampleSection({ nodeId }: { nodeId: string }) {
   );
 }
 
+function InsightSection({ node, edges, nodes }: { node: GraphNode; edges: GraphEdge[]; nodes: GraphNode[] }) {
+  const { setSelectedId } = useStore();
+  const severity = node.meta.severity ?? "info";
+  const evidenceIds = edges.filter((e) => e.kind === "produces" && e.target === node.id).map((e) => e.source);
+  const evidence = evidenceIds.map((id) => nodes.find((n) => n.id === id)).filter((n): n is GraphNode => n != null);
+
+  return (
+    <>
+      <div className="mt-2 flex items-center gap-1.5">
+        <span
+          aria-hidden
+          className="h-1.5 w-1.5 shrink-0 rounded-full"
+          style={{ background: SEVERITY_COLOR[severity] ?? SEVERITY_COLOR.info }}
+        />
+        <span className="text-[10px] uppercase tracking-wider text-text-secondary">{severity}</span>
+      </div>
+      <p className="mt-1.5 text-[12px] leading-snug text-text-primary">{node.label}</p>
+      {evidence.length > 0 ? (
+        <div className="mt-2">
+          <div className="text-[10px] uppercase tracking-wider text-text-secondary">Evidence</div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {evidence.map((e) => (
+              <button
+                key={e.id}
+                type="button"
+                onClick={() => setSelectedId(e.id)}
+                className="rounded border border-hairline px-1.5 py-0.5 font-mono text-[10px] text-text-secondary hover:border-agent-blue hover:text-text-primary"
+                title={`Jump to ${e.label}`}
+              >
+                {e.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {node.meta.sql_used ? (
+        <div className="mt-2">
+          <div className="text-[10px] uppercase tracking-wider text-text-secondary">Query used</div>
+          <pre className="mt-0.5 overflow-x-auto rounded border border-hairline bg-canvas px-2 py-1.5 font-mono text-[11px] leading-relaxed text-text-secondary">
+            {node.meta.sql_used}
+          </pre>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 function DeleteNodeButton({ node }: { node: GraphNode }) {
   const { pushToast, setSelectedId } = useStore();
   const [deleting, setDeleting] = useState(false);
@@ -115,14 +171,21 @@ function DeleteNodeButton({ node }: { node: GraphNode }) {
 }
 
 function NodeSection({ node }: { node: GraphNode }) {
+  const { state } = useStore();
   const metaEntries = Object.entries(node.meta);
   return (
     <div className="border-b border-hairline px-3 py-3">
-      <Field label="Kind" value={node.kind} mono />
-      <Field label="Status" value={node.status} mono />
-      {metaEntries.map(([key, value]) => (
-        <Field key={key} label={key} value={value} mono />
-      ))}
+      {node.kind === "insight" ? (
+        <InsightSection node={node} edges={state.graph.edges} nodes={state.graph.nodes} />
+      ) : (
+        <>
+          <Field label="Kind" value={node.kind} mono />
+          <Field label="Status" value={node.status} mono />
+          {metaEntries.map(([key, value]) => (
+            <Field key={key} label={key} value={value} mono />
+          ))}
+        </>
+      )}
       <SampleSection nodeId={node.id} />
       <DeleteNodeButton node={node} />
     </div>
