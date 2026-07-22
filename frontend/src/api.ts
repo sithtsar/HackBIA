@@ -1,4 +1,4 @@
-import type { BoardState, UploadResponse, Workflow } from "./types";
+import type { BoardState, NodeSample, UploadResponse, Workflow } from "./types";
 import fixtureStateRaw from "./fixtures/state.json";
 
 // ponytail: JSON imports widen string literal fields (e.g. "status") to
@@ -20,6 +20,28 @@ export async function fetchState(): Promise<BoardState> {
   return (await res.json()) as BoardState;
 }
 
+export async function getNodeSample(nodeId: string): Promise<NodeSample> {
+  const res = await fetch(`/api/nodes/${encodeURIComponent(nodeId)}/sample`);
+  if (!res.ok) {
+    throw new Error(`GET /api/nodes/${nodeId}/sample failed: ${res.status}`);
+  }
+  return (await res.json()) as NodeSample;
+}
+
+export type DeleteNodeResponse = { node_ids: string[] };
+
+export async function deleteGraphNode(nodeId: string): Promise<DeleteNodeResponse> {
+  const res = await fetch(`/api/graph/${encodeURIComponent(nodeId)}`, { method: "DELETE" });
+  if (!res.ok) {
+    const detail = await res
+      .json()
+      .then((j: { detail?: string }) => j.detail)
+      .catch(() => undefined);
+    throw new Error(detail ?? `DELETE /api/graph/${nodeId} failed: ${res.status}`);
+  }
+  return (await res.json()) as DeleteNodeResponse;
+}
+
 export type ApprovalDecision = "approved" | "rejected";
 
 export async function postApproval(
@@ -37,6 +59,16 @@ export async function postApproval(
 }
 
 export type RunHandle = { run_id: string };
+
+/** Data-driven prompt chips, grounded in the current approved ontology + schema.
+ * Throws on 502 (LLM/parse failure) — caller falls back to a static list. */
+export async function getAskSuggestions(): Promise<string[]> {
+  const res = await fetch("/api/ask/suggestions");
+  if (!res.ok) {
+    throw new Error(`GET /api/ask/suggestions failed: ${res.status}`);
+  }
+  return ((await res.json()) as { questions: string[] }).questions;
+}
 
 export async function postAsk(question: string): Promise<RunHandle> {
   const res = await fetch("/api/ask", {

@@ -24,6 +24,7 @@ const TYPE_COLOR: Record<EventType, string> = {
   workflow_created: "var(--color-agent-blue)",
   workflow_renamed: "var(--color-agent-blue)",
   workflow_completed: "var(--color-committed-green)",
+  node_deleted: ERROR_RED,
 };
 
 function colorFor(e: EventEnvelope): string {
@@ -83,6 +84,8 @@ function summarize(e: EventEnvelope): string {
       return `workflow renamed: ${e.payload.title}`;
     case "workflow_completed":
       return `workflow completed: ${e.payload.workflow_id}`;
+    case "node_deleted":
+      return `deleted ${e.payload.node_ids.length} node${e.payload.node_ids.length === 1 ? "" : "s"}: ${e.payload.node_ids.join(", ")}`;
   }
 }
 

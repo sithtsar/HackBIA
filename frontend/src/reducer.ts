@@ -214,6 +214,16 @@ export function reduceBoard(board: BoardState, envelope: EventEnvelope): BoardSt
       return { ...board, workflows };
     }
 
+    case "node_deleted": {
+      const deleted = new Set(envelope.payload.node_ids);
+      const nodes = board.graph.nodes.filter((n) => !deleted.has(n.id));
+      const edges = board.graph.edges.filter((e) => !deleted.has(e.source) && !deleted.has(e.target));
+      const terms = board.terms.filter((t) => !deleted.has(t.id));
+      const actions = board.actions.filter((a) => !deleted.has(a.id));
+      const pending = board.pending.filter((p) => !deleted.has(p.subject_id));
+      return { ...board, graph: { nodes, edges }, terms, actions, pending };
+    }
+
     // run_started, status, node_touched, edge_traversed, sql_generated,
     // sql_result, run_completed, error: feed-only, board is unchanged.
     default:

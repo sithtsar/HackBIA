@@ -49,6 +49,14 @@ export type GraphEdge = {
 export type UploadColumn = { name: string; type: string };
 export type UploadResponse = { table: string; rows: number; columns: UploadColumn[] };
 
+// GET /api/nodes/{id}/sample response shape.
+export type NodeSample = {
+  columns: string[];
+  head: (string | number | null)[][];
+  tail: (string | number | null)[][];
+  row_count: number;
+};
+
 // --- Below this line: not verbatim contract types, but shapes derived from
 // the "HTTP API" and "Event envelope" sections of contracts.md, needed to
 // type the fetch layer and the SSE seam. ---
@@ -103,6 +111,7 @@ export type ErrorPayload = { message: string };
 export type WorkflowCreatedPayload = { workflow_id: string; title: string };
 export type WorkflowRenamedPayload = { workflow_id: string; title: string };
 export type WorkflowCompletedPayload = { workflow_id: string };
+export type NodeDeletedPayload = { node_ids: string[] };
 
 type EnvelopeBase = { id: string; ts: string; run_id: string; workflow_id: string };
 
@@ -126,6 +135,7 @@ export type EventEnvelope =
   | (EnvelopeBase & { type: "error"; payload: ErrorPayload })
   | (EnvelopeBase & { type: "workflow_created"; payload: WorkflowCreatedPayload })
   | (EnvelopeBase & { type: "workflow_renamed"; payload: WorkflowRenamedPayload })
-  | (EnvelopeBase & { type: "workflow_completed"; payload: WorkflowCompletedPayload });
+  | (EnvelopeBase & { type: "workflow_completed"; payload: WorkflowCompletedPayload })
+  | (EnvelopeBase & { type: "node_deleted"; payload: NodeDeletedPayload });
 
 export type EventType = EventEnvelope["type"];

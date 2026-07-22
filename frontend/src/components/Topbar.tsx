@@ -303,8 +303,8 @@ export function Topbar() {
   };
 
   return (
-    <header className="flex h-12 items-center border-b border-hairline bg-panel px-3">
-      <div className="flex flex-1 items-center gap-2">
+    <header className="flex h-12 items-center gap-3 border-b border-hairline bg-panel px-3">
+      <div className="flex flex-none items-center gap-2">
         <span
           className="h-1.5 w-1.5 rounded-full"
           style={{ background: DOT_COLOR[connectionStatus] }}
@@ -314,14 +314,14 @@ export function Topbar() {
         <WorkflowSwitcher />
       </div>
 
-      <div className="flex flex-1 flex-col items-center">
+      <div className="flex min-w-0 flex-1 flex-col items-center">
         <CommandPalette actions={paletteActions} />
         {actionError ? (
           <span className="mt-0.5 max-w-md truncate font-mono text-[10px] text-[#E5484D]">{actionError}</span>
         ) : null}
       </div>
 
-      <div className="flex flex-1 items-center justify-end gap-3">
+      <div className="flex flex-none items-center justify-end gap-3">
         <span className="font-mono text-[12px] text-text-secondary">
           AGENT {elapsed} / MANUAL {MANUAL_BASELINE}
         </span>

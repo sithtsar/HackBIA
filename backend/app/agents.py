@@ -38,7 +38,13 @@ import duckdb
 from dotenv import load_dotenv
 
 from baml_client.sync_client import b
-from baml_client.types import ActionDraftResponse, AskResponse, DraftMetricsResponse, InsightInterpretation
+from baml_client.types import (
+    ActionDraftResponse,
+    AskResponse,
+    DraftMetricsResponse,
+    InsightInterpretation,
+    SuggestQuestionsResponse,
+)
 
 from . import ontology as onto_mod
 from .events import EventBus, OntologyTerm
@@ -61,6 +67,10 @@ def llm_draft_metrics(schema_and_samples: str, inferred_joins_json: str) -> Draf
 
 def llm_ask(question: str, approved_terms_json: str, schema_and_samples: str, retry_note: str) -> AskResponse:
     return b.AskQuestion(question, approved_terms_json, schema_and_samples, retry_note)
+
+
+def llm_suggest_questions(approved_terms_json: str, schema_and_samples: str) -> SuggestQuestionsResponse:
+    return b.SuggestAskQuestions(approved_terms_json, schema_and_samples)
 
 
 def llm_draft_action(insight_text: str) -> ActionDraftResponse:
@@ -391,6 +401,25 @@ def _cell(v: Any) -> Any:
     return str(v)
 
 
+def sample_node_data(kind: str, meta: dict[str, str]) -> dict[str, Any] | None:
+    """Head/tail rows for a graph node's underlying data — a table for a
+    source/object node, the metric's own SQL for a metric node, or the SQL
+    that produced an insight. None for kinds with no underlying query (action)."""
+    if kind in ("source", "object") and meta.get("table"):
+        base_sql = f'SELECT * FROM "{meta["table"]}"'
+    elif meta.get("sql"):
+        base_sql = f"SELECT * FROM ({meta['sql']}) sampled"
+    elif meta.get("sql_used"):
+        base_sql = f"SELECT * FROM ({meta['sql_used']}) sampled"
+    else:
+        return None
+    total = _execute(f"SELECT COUNT(*) AS n FROM ({base_sql}) counted")["rows"][0][0]
+    head = _execute(f"{base_sql} LIMIT 5")
+    tail_offset = max(int(total) - 5, 0)
+    tail = _execute(f"{base_sql} LIMIT 5 OFFSET {tail_offset}")
+    return {"columns": head["columns"], "head": head["rows"], "tail": tail["rows"], "row_count": total}
+
+
 def _emit_lineage(bus: EventBus, run_id: str, onto: dict[str, Any], term_ids: list[str]) -> list[str]:
     """Emit node_touched/edge_traversed along the real lineage for the terms
     used, using graph ids from ontology.py's builder. Returns touched object
@@ -436,6 +465,22 @@ def _emit_lineage(bus: EventBus, run_id: str, onto: dict[str, Any], term_ids: li
                 bus.publish("edge_traversed", {"source": obj, "target": tid}, run_id)
             touch(tid)
     return touched_objects
+
+
+async def get_ask_suggestions() -> list[str]:
+    """Data-driven prompt chips for the ask palette — grounded in the actual
+    approved ontology + schema, not a static list. Raises on LLM/parse
+    failure; callers fall back to a static list rather than swallow it."""
+    onto = onto_mod.load_ontology()
+    approved = [t for t in onto_mod.terms_from_ontology(onto) if t.status == "approved"]
+    schema = await asyncio.to_thread(introspect, 5)
+    terms_blob = json.dumps([
+        {"id": t.id, "kind": t.kind, "name": t.name, "definition": t.definition, "sql": t.sql}
+        for t in approved
+    ])
+    schema_prompt = build_schema_prompt(schema, max_rows=5)
+    resp = await asyncio.to_thread(llm_suggest_questions, terms_blob, schema_prompt)
+    return list(resp.questions)
 
 
 async def run_ask(bus: EventBus, run_id: str, question: str, workflow_id: str = "") -> None:
@@ -486,29 +531,30 @@ async def run_ask(bus: EventBus, run_id: str, question: str, workflow_id: str = 
         result = await asyncio.to_thread(_execute, sql)
         bus.publish("sql_result", result, run_id, workflow_id=workflow_id)
 
-        # Generic insight interpretation: LLM evaluates actual query results
-        # (seeded ticket anomaly is discovered organically, not by hardcoded check).
+        # LLM evaluates actual query results and always answers the question directly;
+        # has_insight/severity separately flag whether it ALSO found an anomaly worth
+        # surfacing as a candidate action (seeded ticket anomaly is discovered
+        # organically, not by hardcoded check).
         terms_used_json = json.dumps(terms_used)
         result_json = json.dumps({"columns": result["columns"], "rows": result["rows"], "row_count": result["row_count"]})
         interpretation = await asyncio.to_thread(
             llm_interpret_insight, question, sql, result_json, terms_used_json,
         )
 
-        if interpretation.has_insight:
-            node_ids = touched_objects or []
-            insight_node_id = f"insight_{run_id}"
-            bus.publish(
-                "insight",
-                {
-                    "text": interpretation.text,
-                    "severity": interpretation.severity,
-                    "node_ids": node_ids,
-                    "sql_used": sql,
-                },
-                run_id,
-                workflow_id=workflow_id,
-            )
-            bus.publish("node_touched", {"node_id": insight_node_id}, run_id, workflow_id=workflow_id)
+        node_ids = touched_objects or []
+        insight_node_id = f"insight_{run_id}"
+        bus.publish(
+            "insight",
+            {
+                "text": interpretation.text,
+                "severity": interpretation.severity,
+                "node_ids": node_ids,
+                "sql_used": sql,
+            },
+            run_id,
+            workflow_id=workflow_id,
+        )
+        bus.publish("node_touched", {"node_id": insight_node_id}, run_id, workflow_id=workflow_id)
 
         bus.publish("run_completed", {"summary": "Answered with grounded SQL"}, run_id, workflow_id=workflow_id)
     except Exception as e:  # noqa: BLE001

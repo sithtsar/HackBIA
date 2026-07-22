@@ -20,7 +20,7 @@ from .globals import DO_NOT_USE_DIRECTLY_UNLESS_YOU_KNOW_WHAT_YOURE_DOING_RUNTIM
 class TypeBuilder(type_builder.TypeBuilder):
     def __init__(self):
         super().__init__(classes=set(
-          ["ActionDraftResponse","AskResponse","DraftMetric","DraftMetricsResponse","InsightInterpretation",]
+          ["ActionDraftResponse","AskResponse","DraftMetric","DraftMetricsResponse","InsightInterpretation","SuggestQuestionsResponse",]
         ), enums=set(
           []
         ), runtime=DO_NOT_USE_DIRECTLY_UNLESS_YOU_KNOW_WHAT_YOURE_DOING_RUNTIME)
@@ -31,7 +31,7 @@ class TypeBuilder(type_builder.TypeBuilder):
 
 
     # #########################################################################
-    # Generated classes 5
+    # Generated classes 6
     # #########################################################################
 
     @property
@@ -54,6 +54,10 @@ class TypeBuilder(type_builder.TypeBuilder):
     def InsightInterpretation(self) -> "InsightInterpretationViewer":
         return InsightInterpretationViewer(self)
 
+    @property
+    def SuggestQuestionsResponse(self) -> "SuggestQuestionsResponseViewer":
+        return SuggestQuestionsResponseViewer(self)
+
 
 
 # #########################################################################
@@ -62,7 +66,7 @@ class TypeBuilder(type_builder.TypeBuilder):
 
 
 # #########################################################################
-# Generated classes 5
+# Generated classes 6
 # #########################################################################
 
 class ActionDraftResponseAst:
@@ -304,6 +308,45 @@ class InsightInterpretationProperties:
     @property
     def reasoning_one_line(self) -> type_builder.ClassPropertyViewer:
         return type_builder.ClassPropertyViewer(self.__bldr.property("reasoning_one_line"))
+    
+    
+
+
+class SuggestQuestionsResponseAst:
+    def __init__(self, tb: type_builder.TypeBuilder):
+        _tb = tb._tb # type: ignore (we know how to use this private attribute)
+        self._bldr = _tb.class_("SuggestQuestionsResponse")
+        self._properties: typing.Set[str] = set([  "questions",  ])
+        self._props = SuggestQuestionsResponseProperties(self._bldr, self._properties)
+
+    def type(self) -> baml_py.FieldType:
+        return self._bldr.field()
+
+    @property
+    def props(self) -> "SuggestQuestionsResponseProperties":
+        return self._props
+
+
+class SuggestQuestionsResponseViewer(SuggestQuestionsResponseAst):
+    def __init__(self, tb: type_builder.TypeBuilder):
+        super().__init__(tb)
+
+    
+    def list_properties(self) -> typing.List[typing.Tuple[str, type_builder.ClassPropertyViewer]]:
+        return [(name, type_builder.ClassPropertyViewer(self._bldr.property(name))) for name in self._properties]
+    
+
+
+class SuggestQuestionsResponseProperties:
+    def __init__(self, bldr: baml_py.ClassBuilder, properties: typing.Set[str]):
+        self.__bldr = bldr
+        self.__properties = properties # type: ignore (we know how to use this private attribute) # noqa: F821
+
+    
+    
+    @property
+    def questions(self) -> type_builder.ClassPropertyViewer:
+        return type_builder.ClassPropertyViewer(self.__bldr.property("questions"))
     
     
 
